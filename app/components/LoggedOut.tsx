@@ -9,7 +9,8 @@ import { getAppDetails } from '@/app/api/beUtils';
 export default async function LoggedOut() {
   const { appId } = publicConfig;
   const appDetails = await getAppDetails(appId);
-  const appName = appDetails.name;
+  const appName = appDetails._configError ? 'WhatsApp Business' : appDetails.name;
+
 
   return (
     <main className="min-h-screen bg-[#e8edf2] flex flex-col items-center justify-center p-4">

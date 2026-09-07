@@ -9,6 +9,18 @@ import { sql } from '@vercel/postgres';
 
 import getPrivateConfig from '@/app/privateConfig';
 import publicConfig from '@/app/publicConfig';
+import {
+  isMockMode,
+  MOCK_APP_DETAILS,
+  MOCK_WABAS,
+  MOCK_PHONES,
+  MOCK_PAGES,
+  MOCK_AD_ACCOUNTS,
+  MOCK_DATASETS,
+  MOCK_CATALOGS,
+  MOCK_INSTAGRAM_ACCOUNTS,
+  MOCK_MESSAGE_TEMPLATES,
+} from '@/app/api/mockData';
 import type {
   SubscribeWebhookResponse,
   SqlResult,
@@ -265,6 +277,12 @@ export async function send(
 //////////////////////////////////////////////////////////
 
 export async function getWabas(userId: string): Promise<WabaWithDetails[]> {
+  // Mock mode: return fake data for UI development
+  if (isMockMode()) {
+    console.log('[MOCK] getWabas: returning mock WABAs');
+    return MOCK_WABAS;
+  }
+
   // Get page IDs and access tokens from the database
   const { rows }: { rows: WabaRow[] } = await sql`
     SELECT DISTINCT waba_id, access_token, business_id
@@ -322,6 +340,12 @@ async function getWabaRows(userId: string): Promise<WabaRow[]> {
 }
 
 export async function getClientPhones(userId: string): Promise<ClientPhone[]> {
+  // Mock mode: return fake data for UI development
+  if (isMockMode()) {
+    console.log('[MOCK] getClientPhones: returning mock phones');
+    return MOCK_PHONES;
+  }
+
   const rows: WabaRow[] = await getWabaRows(userId);
   const nestedPhones: PhoneDetails[][] = await Promise.all(
     rows.map(async (row: WabaRow) => {
@@ -488,6 +512,12 @@ export async function verifyCode(phoneId: string, accessToken: string, otpCode: 
 //////////////////////////////////////////////////////////
 
 export async function getMessageTemplates(wabaId: string, accessToken: string): Promise<MessageTemplate[]> {
+  // Mock mode: return fake data for UI development
+  if (isMockMode()) {
+    console.log('[MOCK] getMessageTemplates: returning mock templates');
+    return MOCK_MESSAGE_TEMPLATES;
+  }
+
   console.log('getMessageTemplates:', 'wabaId', wabaId);
   const url = `/${wabaId}/message_templates?fields=name,language,status,components,category&limit=1000`;
   const data = await graphApiWrapperGet(url, accessToken);
@@ -601,6 +631,12 @@ export async function getTemplateGatingData(
 //////////////////////////////////////////////////////////
 
 export async function getPages(userId: string): Promise<PageWithDetails[]> {
+  // Mock mode: return fake data for UI development
+  if (isMockMode()) {
+    console.log('[MOCK] getPages: returning mock pages');
+    return MOCK_PAGES;
+  }
+
   // Get page IDs and access tokens from the database
   const { rows }: { rows: PageRow[] } = await sql`
     SELECT DISTINCT page_id, access_token, business_id
@@ -637,6 +673,12 @@ export async function getPages(userId: string): Promise<PageWithDetails[]> {
 //////////////////////////////////////////////////////////
 
 export async function getAdAccounts(userId: string): Promise<AdAccountWithDetails[]> {
+  // Mock mode: return fake data for UI development
+  if (isMockMode()) {
+    console.log('[MOCK] getAdAccounts: returning mock ad accounts');
+    return MOCK_AD_ACCOUNTS;
+  }
+
   // Get ad account IDs and access tokens from the database
   const { rows }: { rows: AdAccountRow[] } = await sql`
     SELECT DISTINCT ad_account_id, access_token, business_id
@@ -783,12 +825,51 @@ export async function setAckBotStatus(
 // App Details
 //////////////////////////////////////////////////////////
 
-export async function getAppDetails(appId: string): Promise<AppDetails> {
+export async function getAppDetails(appId: string): Promise<AppDetails & { _configError?: boolean }> {
+  // Mock mode: return fake data for UI development
+  if (isMockMode()) {
+    console.log('[MOCK] getAppDetails: returning mock app details');
+    return MOCK_APP_DETAILS;
+  }
+
   const privateConfig = await getPrivateConfig();
   console.log('getAppDetails:', 'appId', appId);
+
+  // Detect placeholder / missing credentials and return a safe fallback
+  // instead of crashing the whole page with a 500.
+  const isPlaceholder =
+    !appId ||
+    appId === 'your-facebook-app-id' ||
+    !privateConfig.fbAppSecret ||
+    privateConfig.fbAppSecret === 'your-facebook-app-secret';
+
+  if (isPlaceholder) {
+    console.warn('getAppDetails: FB_APP_ID or FB_APP_SECRET is not configured. Returning config-error fallback.');
+    return {
+      _configError: true,
+      id: appId ?? '',
+      client_config: {},
+      name: 'Unconfigured App',
+      app_domains: [],
+      app_type: '',
+      config_ids: [],
+    };
+  }
+
   const url = `/${appId}?fields=client_config,name,logo_url,app_domains,app_type,company,link,config_ids`;
   const data = await graphApiWrapperGet(url, `${publicConfig.appId}|${privateConfig.fbAppSecret}`);
-  if (data.error) throw data.error;
+  if (data.error) {
+    console.error('getAppDetails: Graph API error', data.error);
+    return {
+      _configError: true,
+      id: appId ?? '',
+      client_config: {},
+      name: 'Unconfigured App',
+      app_domains: [],
+      app_type: '',
+      config_ids: [],
+    };
+  }
   return data;
 }
 
@@ -797,6 +878,12 @@ export async function getAppDetails(appId: string): Promise<AppDetails> {
 //////////////////////////////////////////////////////////
 
 export async function getDatasets(userId: string): Promise<DatasetWithDetails[]> {
+  // Mock mode: return fake data for UI development
+  if (isMockMode()) {
+    console.log('[MOCK] getDatasets: returning mock datasets');
+    return MOCK_DATASETS;
+  }
+
   // Get dataset IDs and access tokens from the database
   const { rows }: { rows: DatasetRow[] } = await sql`
     SELECT DISTINCT dataset_id, access_token, business_id
@@ -844,6 +931,12 @@ export async function getDatasets(userId: string): Promise<DatasetWithDetails[]>
 //////////////////////////////////////////////////////////
 
 export async function getCatalogs(userId: string): Promise<CatalogWithDetails[]> {
+  // Mock mode: return fake data for UI development
+  if (isMockMode()) {
+    console.log('[MOCK] getCatalogs: returning mock catalogs');
+    return MOCK_CATALOGS;
+  }
+
   // Get catalog IDs and access tokens from the database
   const { rows }: { rows: CatalogRow[] } = await sql`
     SELECT DISTINCT catalog_id, access_token, business_id
@@ -882,6 +975,12 @@ export async function getCatalogs(userId: string): Promise<CatalogWithDetails[]>
 //////////////////////////////////////////////////////////
 
 export async function getInstagramAccounts(userId: string): Promise<InstagramAccountWithDetails[]> {
+  // Mock mode: return fake data for UI development
+  if (isMockMode()) {
+    console.log('[MOCK] getInstagramAccounts: returning mock instagram accounts');
+    return MOCK_INSTAGRAM_ACCOUNTS;
+  }
+
   // Get Instagram account IDs and access tokens from the database
   const { rows }: { rows: InstagramAccountRow[] } = await sql`
     SELECT DISTINCT instagram_account_id, access_token, business_id

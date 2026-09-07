@@ -9,6 +9,8 @@ import { getToken, saveTokens, registerNumber, subscribeWebhook, graphApiEnableC
 import { wrapFn, skipProm } from '@/app/errorformat';
 import { withAuth } from '@/app/api/authWrapper';
 
+import { whatsappConnectionService } from '@/lib/services/whatsapp/connectionService';
+
 export const POST = withAuth(async function exchangeToken(request: NextRequest, session) {
   const user = session.user;
 
@@ -60,10 +62,29 @@ export const POST = withAuth(async function exchangeToken(request: NextRequest, 
     }
 
     const accessToken = tokenValue as string;
+
+    // Multi-tenant AES-256-GCM encrypted persistence to PostgreSQL
+    try {
+      for (const currentWabaId of wabaIds) {
+        await whatsappConnectionService.connectWaba({
+          workspaceId: session.workspace.workspaceId,
+          wabaId: currentWabaId,
+          businessId,
+          name: `WABA ${currentWabaId}`,
+          accessToken,
+          phoneNumberId: phoneNumberId || undefined,
+          displayPhoneNumber: phoneNumberId || undefined,
+          isCallingEnabled: Boolean(esOptionCalling),
+        });
+      }
+    } catch (dbErr) {
+      console.error('Multi-tenant token persistence warning (non-fatal):', dbErr);
+    }
+
     const operations = await Promise.all([
       wrapFn(
         saveTokens(
-          userId,
+          userId || 'default',
           appId,
           businessId,
           pageIds,
