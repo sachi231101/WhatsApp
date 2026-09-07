@@ -15,6 +15,8 @@ export interface AuthSession {
     email?: string;
     name?: string;
     sub?: string;
+    role?: string;
+    isSuperAdmin?: boolean;
   };
   workspace: WorkspaceContext;
 }
@@ -106,6 +108,31 @@ export function withRole(minRole: WorkspaceRole, handler: ApiHandler) {
           error: 'Forbidden',
           message: `Action requires role '${minRole}' or higher.`,
           code: 'ROLE_REQUIRED',
+        },
+        { status: 403 },
+      );
+    }
+
+    return handler(request, session);
+  });
+}
+
+/**
+ * Route protection wrapper requiring Admin privileges.
+ */
+export function withAdmin(handler: ApiHandler) {
+  return withAuth(async (request, session) => {
+    const isAdmin =
+      session.workspace.isSuperAdmin ||
+      session.user.role === 'admin' ||
+      session.workspace.userRole === 'admin';
+
+    if (!isAdmin) {
+      return NextResponse.json(
+        {
+          error: 'Forbidden',
+          message: 'Action requires Platform Administrator privileges.',
+          code: 'ADMIN_REQUIRED',
         },
         { status: 403 },
       );

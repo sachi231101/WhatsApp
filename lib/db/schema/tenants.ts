@@ -14,11 +14,14 @@ export const tenants = pgTable('tenants', {
 
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
-  auth0Sub: varchar('auth0_sub', { length: 255 }).notNull().unique(),
+  auth0Sub: varchar('auth0_sub', { length: 255 }).unique(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   name: varchar('name', { length: 255 }),
   avatarUrl: text('avatar_url'),
   phoneNumber: varchar('phone_number', { length: 50 }),
+  passwordHash: text('password_hash'),
+  role: varchar('role', { length: 50 }).default('client').notNull(),
+  companyName: varchar('company_name', { length: 255 }),
   isSuperAdmin: boolean('is_super_admin').default(false).notNull(),
   status: varchar('status', { length: 50 }).default('active').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

@@ -5,395 +5,529 @@ import Link from 'next/link';
 import {
   MessageSquare,
   Bot,
-  TrendingUp,
   Users,
-  ArrowUpRight,
-  ArrowDownRight,
-  Flame,
-  AlertTriangle,
-  Lightbulb,
-  Sparkles,
-  Clock,
-  CheckCircle2,
-  UserCheck,
   Send,
-  Phone,
-  Target,
+  Calendar,
+  ChevronDown,
+  TrendingUp,
+  Clock,
+  MessageCircle,
+  Trophy,
   Zap,
+  Plus,
+  Brain,
+  Megaphone,
+  ArrowRight,
+  MoreVertical,
+  ArrowUpRight,
   Loader2,
 } from 'lucide-react';
-import { DashboardCalendar } from '@/components/dashboard/DashboardCalendar';
 
-// ─── Stat Card ─────────────────────────────────────────────────────────────
+// ─── Sparkline SVG ────────────────────────────────────────────────────────────
+function Sparkline({ color, up }: { color: string; up?: boolean }) {
+  const paths = [
+    'M0,30 C10,28 15,15 25,18 C35,21 40,10 50,8 C60,6 65,12 75,8 C85,4 90,10 100,5',
+    'M0,25 C10,22 18,30 28,20 C38,10 45,18 55,12 C65,6 72,15 82,10 C92,5 96,8 100,4',
+    'M0,28 C12,20 20,25 30,15 C40,5 48,18 58,10 C68,2 75,12 85,7 C92,4 97,6 100,3',
+    'M0,20 C8,25 15,12 25,18 C35,24 42,10 52,14 C62,18 70,8 80,12 C90,6 95,10 100,7',
+  ];
+  const path = paths[Math.floor(Math.random() * 4)];
+  return (
+    <svg width="100" height="36" viewBox="0 0 100 36" fill="none" className="flex-shrink-0">
+      <path d={path} stroke={color} strokeWidth="2" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({
   label,
   value,
   change,
   up,
   icon: Icon,
-  color,
+  iconBg,
+  iconColor,
+  sparkColor,
+  badge,
 }: {
   label: string;
   value: string | number;
   change: string;
   up: boolean;
   icon: React.ElementType;
-  color: string;
-}) {
-  return (
-    <div className="bg-[#13151c] border border-white/[0.06] rounded-2xl p-5 hover:border-white/10 transition-all group">
-      <div className="flex items-start justify-between mb-4">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-        <span
-          className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${
-            up ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
-          }`}
-        >
-          {up ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-          {change}
-        </span>
-      </div>
-      <p className="text-2xl font-bold text-white mb-1">{value}</p>
-      <p className="text-xs text-white/40">{label}</p>
-    </div>
-  );
-}
-
-// ─── AI Insight Card ────────────────────────────────────────────────────────
-function InsightCard({
-  type,
-  icon: Icon,
-  iconColor,
-  bg,
-  text,
-}: {
-  type: string;
-  icon: React.ElementType;
+  iconBg: string;
   iconColor: string;
-  bg: string;
-  text: string;
+  sparkColor: string;
+  badge?: string;
 }) {
   return (
-    <div className={`flex items-start gap-3 p-3.5 rounded-xl border ${bg} transition-all hover:scale-[1.01]`}>
-      <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${iconColor}`}>
-        <Icon className="w-4 h-4" />
+    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-all">
+      <div className="flex items-start justify-between mb-3">
+        <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center`}>
+          <Icon className={`w-5 h-5 ${iconColor}`} />
+        </div>
+        {badge && (
+          <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-100 text-blue-600">{badge}</span>
+        )}
       </div>
-      <div>
-        <p className="text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-0.5">{type}</p>
-        <p className="text-sm text-white/80 leading-relaxed">{text}</p>
+      <p className="text-xs font-medium text-gray-500 mb-1">{label}</p>
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="text-2xl font-bold text-gray-900 leading-none mb-1">{value}</p>
+          <p className={`text-xs font-semibold flex items-center gap-0.5 ${up ? 'text-green-500' : 'text-red-500'}`}>
+            <ArrowUpRight className={`w-3 h-3 ${up ? '' : 'rotate-180'}`} />
+            {change} vs last week
+          </p>
+        </div>
+        <Sparkline color={sparkColor} up={up} />
       </div>
     </div>
   );
 }
 
-// ─── Activity Item ──────────────────────────────────────────────────────────
-function ActivityItem({
-  icon: Icon,
-  color,
-  text,
-  time,
-}: {
-  icon: React.ElementType;
-  color: string;
-  text: string;
-  time: string;
-}) {
+// ─── Bar Chart ────────────────────────────────────────────────────────────────
+function BarChart({ data }: { data: { label: string; value: number }[] }) {
+  const max = Math.max(...data.map((d) => d.value));
   return (
-    <div className="flex items-start gap-3 py-3">
-      <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
-        <Icon className="w-3.5 h-3.5" />
+    <div className="flex items-end gap-2 h-32 pt-2">
+      {data.map((d) => (
+        <div key={d.label} className="flex flex-col items-center gap-1 flex-1">
+          <div className="w-full flex items-end justify-center" style={{ height: 96 }}>
+            <div
+              className="w-full bg-blue-500 rounded-t-md opacity-80 hover:opacity-100 transition-all cursor-pointer"
+              style={{ height: `${(d.value / max) * 96}px`, minHeight: 4 }}
+            />
+          </div>
+          <span className="text-[10px] text-gray-400 whitespace-nowrap">{d.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Donut Chart ─────────────────────────────────────────────────────────────
+function DonutChart({ aiPct, humanPct, unassignedPct, total }: { aiPct: number; humanPct: number; unassignedPct: number; total: number }) {
+  const r = 52;
+  const circ = 2 * Math.PI * r;
+  const aiDash = (aiPct / 100) * circ;
+  const humanDash = (humanPct / 100) * circ;
+  const unassignedDash = (unassignedPct / 100) * circ;
+  const aiOffset = 0;
+  const humanOffset = -aiDash;
+  const unassignedOffset = -(aiDash + humanDash);
+
+  return (
+    <div className="flex items-center gap-6">
+      <div className="relative w-32 h-32 flex-shrink-0">
+        <svg width="128" height="128" viewBox="0 0 128 128">
+          <circle cx="64" cy="64" r={r} fill="none" stroke="#f3f4f6" strokeWidth="18" />
+          {/* AI Handled */}
+          <circle cx="64" cy="64" r={r} fill="none" stroke="#4F6EF7" strokeWidth="18"
+            strokeDasharray={`${aiDash} ${circ - aiDash}`}
+            strokeDashoffset={-aiOffset + circ / 4}
+            strokeLinecap="butt"
+          />
+          {/* Human Handled */}
+          <circle cx="64" cy="64" r={r} fill="none" stroke="#a855f7" strokeWidth="18"
+            strokeDasharray={`${humanDash} ${circ - humanDash}`}
+            strokeDashoffset={humanOffset + circ / 4}
+            strokeLinecap="butt"
+          />
+          {/* Unassigned */}
+          <circle cx="64" cy="64" r={r} fill="none" stroke="#d1d5db" strokeWidth="18"
+            strokeDasharray={`${unassignedDash} ${circ - unassignedDash}`}
+            strokeDashoffset={unassignedOffset + circ / 4}
+            strokeLinecap="butt"
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-lg font-bold text-gray-900">{total.toLocaleString()}</span>
+          <span className="text-[10px] text-gray-400">Total</span>
+        </div>
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-white/70 leading-relaxed">{text}</p>
-        <p className="text-[10px] text-white/25 mt-0.5">{time}</p>
+      <div className="space-y-2.5">
+        {[
+          { label: 'AI Handled', pct: aiPct, color: 'bg-[#4F6EF7]' },
+          { label: 'Human Handled', pct: humanPct, color: 'bg-purple-500' },
+          { label: 'Unassigned', pct: unassignedPct, color: 'bg-gray-300' },
+        ].map((item) => (
+          <div key={item.label} className="flex items-center gap-2 text-xs">
+            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${item.color}`} />
+            <span className="text-gray-600">{item.label}</span>
+            <span className="font-semibold text-gray-900 ml-auto">{item.pct}%</span>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-// ─── Page ───────────────────────────────────────────────────────────────────
+// ─── Status Pill ─────────────────────────────────────────────────────────────
+function StatusPill({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    open: 'bg-green-100 text-green-700',
+    resolved: 'bg-gray-100 text-gray-500',
+    pending: 'bg-orange-100 text-orange-600',
+    'ai handling': 'bg-blue-100 text-blue-600',
+  };
+  return (
+    <span className={`px-2.5 py-0.5 text-[11px] font-semibold rounded-full ${styles[status.toLowerCase()] || 'bg-gray-100 text-gray-500'}`}>
+      {status}
+    </span>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ClientDashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState('');
+
+  const getGreeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
 
   useEffect(() => {
+    fetch('/api/auth/me').then(r => r.json()).then(j => {
+      if (j.authenticated) setUserName(j.user.name?.split(' ')[0] || 'there');
+    }).catch(() => {});
+
     fetch('/api/dashboard/stats')
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.status === 'ok') {
-          setData(json.data);
-        }
-      })
-      .catch((err) => console.error('Stats error:', err))
+      .then((r) => r.json())
+      .then((j) => { if (j.status === 'ok') setData(j.data); })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
   const stats = data?.stats || {
-    totalConversations: 1284,
-    aiResolved: 873,
-    hotLeads: 47,
-    conversionRate: '23.4%',
-    messagesToday: 3847,
-    activeContacts: 12490,
+    activeConversations: 124,
+    aiResolutionRate: 68,
+    newLeads: 42,
+    messagesToday: 1284,
   };
 
-  const recent = data?.recentConversations || [];
+  const recent: any[] = data?.recentConversations || [
+    { id: '1', profile_name: 'Rahul Sharma', last_message_preview: 'Can you tell me the course price?', assigned_to: 'Priya', status: 'open', last_message_at: new Date(Date.now() - 2 * 60000).toISOString() },
+    { id: '2', profile_name: 'Priya Patel', last_message_preview: 'Thank you! 🙏', assigned_to: 'AI Agent', status: 'ai handling', last_message_at: new Date(Date.now() - 10 * 60000).toISOString() },
+    { id: '3', profile_name: 'Amit Kumar', last_message_preview: 'Do you have a demo class?', assigned_to: 'Vikram', status: 'open', last_message_at: new Date(Date.now() - 25 * 60000).toISOString() },
+    { id: '4', profile_name: 'Sneha Reddy', last_message_preview: 'What are the batch timings?', assigned_to: 'AI Agent', status: 'open', last_message_at: new Date(Date.now() - 60 * 60000).toISOString() },
+    { id: '5', profile_name: 'Vikrant Tiwari', last_message_preview: 'I want to enroll in this course', assigned_to: 'Neha', status: 'pending', last_message_at: new Date(Date.now() - 120 * 60000).toISOString() },
+  ];
+
+  const barData = [
+    { label: 'Apr 24', value: 95 },
+    { label: 'Apr 25', value: 60 },
+    { label: 'Apr 26', value: 45 },
+    { label: 'Apr 27', value: 80 },
+    { label: 'Apr 28', value: 110 },
+    { label: 'Apr 29', value: 140 },
+    { label: 'Apr 30', value: 165 },
+  ];
+
+  const timeAgo = (iso: string) => {
+    const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+    if (diff < 1) return 'just now';
+    if (diff < 60) return `${diff}m ago`;
+    return `${Math.floor(diff / 60)}h ago`;
+  };
+
+  const avatarInitials = (name: string) =>
+    name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
+
+  const avatarColors = ['bg-red-400', 'bg-purple-400', 'bg-blue-400', 'bg-pink-400', 'bg-emerald-400', 'bg-orange-400'];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="flex-1 overflow-y-auto p-6 space-y-5">
+      {/* Header Row */}
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">Good morning, Sachin 👋</h1>
-          <p className="text-sm text-white/40 mt-0.5">Here&apos;s what&apos;s happening with your WhatsApp today.</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {getGreeting()}, {userName || 'Sachin'}! 👋
+          </h1>
+          <p className="text-sm text-gray-500 mt-0.5">Here&apos;s what&apos;s happening with your business today.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/[0.05] border border-white/[0.07] text-sm text-white/60 hover:text-white/80 hover:bg-white/[0.07] transition-all">
-            <Clock className="w-3.5 h-3.5" />
-            Last 7 days
-          </button>
-          <Link
-            href="/inbox"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-sm font-semibold text-white shadow-lg shadow-green-900/30 hover:opacity-90 transition-all"
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            Open Team Inbox
-          </Link>
-        </div>
+        <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-600 font-medium hover:bg-gray-50 transition-all shadow-sm">
+          <Calendar className="w-4 h-4 text-gray-400" />
+          Apr 1, 2025 – Apr 30, 2025
+          <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+        </button>
       </div>
 
-      {/* Stats Row */}
+      {/* Stat Cards */}
       <div className="grid grid-cols-4 gap-4">
         <StatCard
-          label="Total Conversations"
-          value={stats.totalConversations}
+          label="Active Conversations"
+          value={stats.activeConversations || 124}
           change="12%"
           up
           icon={MessageSquare}
-          color="bg-blue-500/10 text-blue-400"
+          iconBg="bg-green-100"
+          iconColor="text-green-500"
+          sparkColor="#22c55e"
         />
         <StatCard
-          label="AI Resolved"
-          value={stats.aiResolved}
-          change="18%"
+          label="AI Resolution Rate"
+          value={`${stats.aiResolutionRate || 68}%`}
+          change="8%"
           up
           icon={Bot}
-          color="bg-purple-500/10 text-purple-400"
+          iconBg="bg-purple-100"
+          iconColor="text-purple-500"
+          sparkColor="#a855f7"
         />
         <StatCard
-          label="Hot Leads"
-          value={stats.hotLeads}
-          change="5%"
+          label="New Leads"
+          value={stats.newLeads || 42}
+          change="15%"
           up
-          icon={Flame}
-          color="bg-orange-500/10 text-orange-400"
+          icon={Users}
+          iconBg="bg-blue-100"
+          iconColor="text-blue-500"
+          sparkColor="#4F6EF7"
         />
         <StatCard
-          label="Conversion Rate"
-          value={stats.conversionRate}
-          change="2.1%"
+          label="Messages Today"
+          value={(stats.messagesToday || 1284).toLocaleString()}
+          change="20%"
           up
-          icon={TrendingUp}
-          color="bg-green-500/10 text-green-400"
+          icon={Send}
+          iconBg="bg-orange-100"
+          iconColor="text-orange-500"
+          sparkColor="#f97316"
+          badge="AI"
         />
       </div>
 
-      {/* AI Demo & Meeting Calendar Section */}
-      <DashboardCalendar
-        onNotificationUpdate={() => {
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('wazzapp:notification-update'));
-          }
-        }}
-      />
-
-      {/* Middle Row: AI Insights + Live Conversations */}
+      {/* Charts + Right Panel */}
       <div className="grid grid-cols-3 gap-4">
-        {/* AI Insights Panel */}
-        <div className="col-span-1 bg-[#13151c] border border-white/[0.06] rounded-2xl p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center">
-              <Sparkles className="w-3.5 h-3.5 text-white" />
-            </div>
-            <h2 className="text-sm font-bold text-white">AI Insights</h2>
-          </div>
-          <div className="space-y-2.5">
-            <InsightCard
-              type="Trend"
-              icon={TrendingUp}
-              iconColor="bg-green-500/10 text-green-400"
-              bg="border-green-500/10 bg-green-500/[0.03]"
-              text="Lead conversion increased by 18% this week"
-            />
-            <InsightCard
-              type="Hot Topic"
-              icon={Flame}
-              iconColor="bg-orange-500/10 text-orange-400"
-              bg="border-orange-500/10 bg-orange-500/[0.03]"
-              text="Most customers are asking about pricing"
-            />
-            <InsightCard
-              type="Warning"
-              icon={AlertTriangle}
-              iconColor="bg-yellow-500/10 text-yellow-400"
-              bg="border-yellow-500/10 bg-yellow-500/[0.03]"
-              text="23 hot leads haven't received a human response"
-            />
-            <InsightCard
-              type="AI Performance"
-              icon={Bot}
-              iconColor="bg-purple-500/10 text-purple-400"
-              bg="border-purple-500/10 bg-purple-500/[0.03]"
-              text="AI resolved 68% of conversations today"
-            />
-            <InsightCard
-              type="Recommendation"
-              icon={Lightbulb}
-              iconColor="bg-blue-500/10 text-blue-400"
-              bg="border-blue-500/10 bg-blue-500/[0.03]"
-              text="Create a pricing-focused campaign to convert 23 warm leads"
-            />
-          </div>
-          <Link
-            href="/ai-agents"
-            className="block text-center w-full mt-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600/20 to-purple-600/20 border border-violet-500/20 text-xs font-semibold text-violet-400 hover:from-violet-600/30 hover:to-purple-600/30 transition-all"
-          >
-            Manage AI Agents ✨
-          </Link>
-        </div>
-
-        {/* Live Conversations from Database */}
-        <div className="col-span-2 bg-[#13151c] border border-white/[0.06] rounded-2xl overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-white">Live Conversations</h2>
-              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-500/15 text-green-400">
-                {stats.totalConversations} total
-              </span>
-            </div>
-            <Link href="/inbox" className="text-xs text-white/40 hover:text-white/80 transition-colors">
-              View all in Inbox →
-            </Link>
-          </div>
-
-          <div className="flex-1 divide-y divide-white/[0.04] overflow-y-auto">
-            {loading ? (
-              <div className="p-8 flex items-center justify-center text-xs text-white/40">
-                <Loader2 className="w-4 h-4 animate-spin mr-2 text-green-400" />
-                Loading conversations...
+        {/* Left: Charts column */}
+        <div className="col-span-2 space-y-4">
+          {/* Charts Row */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Bar Chart */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between mb-1">
+                <div>
+                  <h2 className="text-sm font-bold text-gray-800">Conversation Activity</h2>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Total conversations over the last 7 days</p>
+                </div>
+                <button className="flex items-center gap-1 text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 font-medium">
+                  Last 7 days <ChevronDown className="w-3 h-3" />
+                </button>
               </div>
-            ) : recent.length > 0 ? (
-              recent.map((c: any) => (
+              {/* Y axis labels */}
+              <div className="flex gap-2 mt-3">
+                <div className="flex flex-col justify-between text-[10px] text-gray-300 h-32 text-right pr-1" style={{ paddingTop: 4, paddingBottom: 20 }}>
+                  {[200, 150, 100, 50, 0].map(v => <span key={v}>{v}</span>)}
+                </div>
+                <div className="flex-1">
+                  <BarChart data={barData} />
+                </div>
+              </div>
+            </div>
+
+            {/* Donut Chart */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-6 h-6 rounded-md bg-blue-100 flex items-center justify-center">
+                  <TrendingUp className="w-3.5 h-3.5 text-blue-500" />
+                </div>
+                <h2 className="text-sm font-bold text-gray-800">AI vs Human Handling</h2>
+              </div>
+              <DonutChart
+                aiPct={68}
+                humanPct={24}
+                unassignedPct={8}
+                total={stats.messagesToday || 1284}
+              />
+            </div>
+          </div>
+
+          {/* Recent Conversations Table */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-blue-500" />
+                <div>
+                  <h2 className="text-sm font-bold text-gray-800">Recent Conversations</h2>
+                  <p className="text-[11px] text-gray-400">Your latest customer conversations</p>
+                </div>
+              </div>
+              <Link href="/inbox" className="text-xs font-semibold text-blue-500 hover:text-blue-600 transition-colors">
+                View all
+              </Link>
+            </div>
+
+            {/* Table Header */}
+            <div className="grid grid-cols-12 gap-2 px-5 py-2.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50/50 border-b border-gray-100">
+              <div className="col-span-3">Customer</div>
+              <div className="col-span-4">Last Message</div>
+              <div className="col-span-2">Assigned To</div>
+              <div className="col-span-1">Status</div>
+              <div className="col-span-1 text-right">Time</div>
+              <div className="col-span-1"></div>
+            </div>
+
+            {/* Table Rows */}
+            {loading ? (
+              <div className="py-10 flex items-center justify-center text-sm text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin mr-2 text-blue-400" />
+                Loading...
+              </div>
+            ) : (
+              recent.map((conv: any, i: number) => (
                 <Link
-                  key={c.id}
+                  key={conv.id}
                   href="/inbox"
-                  className="flex items-center gap-3 px-5 py-3.5 hover:bg-white/[0.03] transition-all group"
+                  className="grid grid-cols-12 gap-2 px-5 py-3.5 border-b border-gray-50 hover:bg-blue-50/40 transition-all items-center last:border-0"
                 >
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-sm font-bold text-white flex-shrink-0 border border-white/10">
-                    {(c.profile_name || c.phone_number || '?').charAt(0).toUpperCase()}
+                  {/* Customer */}
+                  <div className="col-span-3 flex items-center gap-2.5">
+                    <div className={`w-8 h-8 rounded-full ${avatarColors[i % avatarColors.length]} flex items-center justify-center text-xs font-bold text-white flex-shrink-0`}>
+                      {avatarInitials(conv.profile_name || 'U')}
+                    </div>
+                    <span className="text-sm font-semibold text-gray-800 truncate">{conv.profile_name || conv.phone_number}</span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-sm font-semibold text-white/90 group-hover:text-green-400 transition-colors">
-                        {c.profile_name || c.phone_number}
-                      </span>
-                      <span className="text-[10px] text-white/30">
-                        {new Date(c.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-white/40 truncate">{c.last_message_preview || 'No messages'}</span>
-                      <div className="flex items-center gap-1.5 ml-2">
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-green-500/10 text-green-400">
-                          {c.status}
-                        </span>
-                        {c.unread_count > 0 && (
-                          <span className="w-4 h-4 rounded-full bg-green-500 text-[9px] font-bold text-white flex items-center justify-center">
-                            {c.unread_count}
-                          </span>
-                        )}
+                  {/* Last message */}
+                  <div className="col-span-4 text-xs text-gray-500 truncate">{conv.last_message_preview}</div>
+                  {/* Assigned */}
+                  <div className="col-span-2 flex items-center gap-1.5 text-xs text-gray-600">
+                    {conv.assigned_to === 'AI Agent' ? (
+                      <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                        <Bot className="w-3 h-3 text-purple-500" />
                       </div>
-                    </div>
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-600 flex-shrink-0">
+                        {(conv.assigned_to || 'U')[0]}
+                      </div>
+                    )}
+                    <span className="truncate">{conv.assigned_to || 'Unassigned'}</span>
+                  </div>
+                  {/* Status */}
+                  <div className="col-span-1">
+                    <StatusPill status={conv.status || 'open'} />
+                  </div>
+                  {/* Time */}
+                  <div className="col-span-1 text-xs text-gray-400 text-right">{timeAgo(conv.last_message_at)}</div>
+                  {/* Menu */}
+                  <div className="col-span-1 flex justify-end">
+                    <button className="w-6 h-6 rounded-lg hover:bg-gray-100 flex items-center justify-center transition-all" onClick={e => e.preventDefault()}>
+                      <MoreVertical className="w-3.5 h-3.5 text-gray-400" />
+                    </button>
                   </div>
                 </Link>
               ))
-            ) : (
-              <div className="p-8 text-center text-xs text-white/30">No conversations yet</div>
             )}
           </div>
         </div>
-      </div>
 
-      {/* Bottom Row: Campaign Performance + Activity */}
-      <div className="grid grid-cols-3 gap-4">
-        {/* Campaign Performance */}
-        <div className="col-span-2 bg-[#13151c] border border-white/[0.06] rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-sm font-bold text-white">Campaign Performance</h2>
-            <Link href="/campaigns" className="text-xs text-white/30 hover:text-white/60 transition-colors">
-              Manage Campaigns →
-            </Link>
-          </div>
-
-          <div className="space-y-4">
-            {[
-              { name: 'Diwali Sale 2026', sent: 4200, read: 3100, replied: 890, rate: 74, color: 'bg-green-500' },
-              { name: 'Product Launch — Pro Plan', sent: 1800, read: 1100, replied: 320, rate: 61, color: 'bg-blue-500' },
-              { name: 'Re-engagement Campaign', sent: 3600, read: 1800, replied: 210, rate: 50, color: 'bg-yellow-500' },
-              { name: 'Support Follow-up', sent: 980, read: 870, replied: 640, rate: 89, color: 'bg-purple-500' },
-            ].map((c) => (
-              <div key={c.name}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-medium text-white/75">{c.name}</span>
-                  <div className="flex items-center gap-4 text-[11px] text-white/35">
-                    <span>{c.sent.toLocaleString()} sent</span>
-                    <span>{c.replied.toLocaleString()} replied</span>
-                    <span className="font-semibold text-white/60">{c.rate}% read</span>
-                  </div>
+        {/* Right Panel: AI Insights + Quick Actions */}
+        <div className="space-y-4">
+          {/* AI Insights */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-md bg-yellow-100 flex items-center justify-center">
+                  <Zap className="w-3.5 h-3.5 text-yellow-500" />
                 </div>
-                <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
-                  <div className={`h-full ${c.color} rounded-full opacity-70`} style={{ width: `${c.rate}%` }} />
+                <h2 className="text-sm font-bold text-gray-800">Wazzi AI Insights</h2>
+              </div>
+              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-100 text-blue-600">AI</span>
+            </div>
+
+            {/* Main insight */}
+            <div className="bg-blue-50 rounded-xl p-3 mb-3">
+              <div className="flex items-start gap-2 mb-2">
+                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <TrendingUp className="w-3 h-3 text-green-500" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-gray-800 leading-snug">Pricing-related questions increased by 32% this week.</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">More customers are asking about course pricing and payment options.</p>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
+              <button className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg transition-all">
+                Create Pricing Automation
+              </button>
+            </div>
 
-        {/* Recent Activity */}
-        <div className="bg-[#13151c] border border-white/[0.06] rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-sm font-bold text-white">Recent Activity</h2>
-          </div>
-          <div className="divide-y divide-white/[0.05]">
-            <ActivityItem icon={Bot} color="bg-purple-500/10 text-purple-400" text="AI Agent resolved 12 conversations automatically" time="2 minutes ago" />
-            <ActivityItem icon={Flame} color="bg-orange-500/10 text-orange-400" text="New hot lead: Rahul Sharma (score: 87)" time="5 minutes ago" />
-            <ActivityItem icon={Send} color="bg-blue-500/10 text-blue-400" text="Campaign 'Diwali Sale' sent to 4,200 contacts" time="1 hour ago" />
-            <ActivityItem icon={UserCheck} color="bg-green-500/10 text-green-400" text="Agent Priya was assigned 3 conversations" time="2 hours ago" />
-            <ActivityItem icon={Phone} color="bg-teal-500/10 text-teal-400" text="New phone number +91 98765 43210 connected" time="3 hours ago" />
-            <ActivityItem icon={Target} color="bg-red-500/10 text-red-400" text="Lead qualification workflow triggered for 8 contacts" time="4 hours ago" />
-            <ActivityItem icon={CheckCircle2} color="bg-emerald-500/10 text-emerald-400" text="Template 'order_confirmation' approved by Meta" time="6 hours ago" />
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Stats Row */}
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: 'Messages Today', value: stats.messagesToday, icon: MessageSquare, color: 'text-blue-400' },
-          { label: 'AI Resolution Rate', value: '68%', icon: Bot, color: 'text-purple-400' },
-          { label: 'Avg Response Time', value: '1.4 min', icon: Zap, color: 'text-yellow-400' },
-          { label: 'Active Contacts', value: stats.activeContacts, icon: Users, color: 'text-green-400' },
-        ].map((s) => (
-          <div key={s.label} className="bg-[#13151c] border border-white/[0.06] rounded-xl px-4 py-3.5 flex items-center gap-3 hover:border-white/10 transition-all">
-            <s.icon className={`w-5 h-5 ${s.color} flex-shrink-0`} />
-            <div>
-              <p className="text-base font-bold text-white">{s.value}</p>
-              <p className="text-[10px] text-white/30">{s.label}</p>
+            {/* More insights */}
+            <div className="space-y-3">
+              {[
+                {
+                  icon: Clock,
+                  bg: 'bg-gray-100',
+                  color: 'text-gray-500',
+                  label: 'Best time for engagement',
+                  value: '10:00 AM – 12:00 PM',
+                  sub: 'Most customers respond during this time.',
+                },
+                {
+                  icon: MessageSquare,
+                  bg: 'bg-blue-100',
+                  color: 'text-blue-500',
+                  label: 'Top conversation category',
+                  value: 'Course Information',
+                  sub: '42% of all conversations',
+                },
+                {
+                  icon: Trophy,
+                  bg: 'bg-yellow-100',
+                  color: 'text-yellow-500',
+                  label: 'High-value opportunities',
+                  value: '12 hot leads this week',
+                  sub: 'Estimated revenue: ₹2,40,000',
+                },
+              ].map((item) => (
+                <div key={item.label} className="flex items-start gap-2.5">
+                  <div className={`w-7 h-7 rounded-lg ${item.bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                    <item.icon className={`w-3.5 h-3.5 ${item.color}`} />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-400">{item.label}</p>
+                    <p className="text-xs font-bold text-gray-800">{item.value}</p>
+                    <p className="text-[11px] text-gray-400">{item.sub}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        ))}
+
+          {/* Quick Actions */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="w-4 h-4 text-yellow-500" />
+              <h2 className="text-sm font-bold text-gray-800">Quick Actions</h2>
+            </div>
+            <div className="space-y-1.5">
+              {[
+                { icon: Plus, iconBg: 'bg-green-100', iconColor: 'text-green-500', label: 'Connect WhatsApp Number', sub: 'Add another WhatsApp number', href: '/settings' },
+                { icon: Bot, iconBg: 'bg-purple-100', iconColor: 'text-purple-500', label: 'Create AI Agent', sub: 'Set up an AI assistant', href: '/ai-agents' },
+                { icon: Brain, iconBg: 'bg-blue-100', iconColor: 'text-blue-500', label: 'Upload Knowledge Base', sub: 'Give AI your business information', href: '/knowledge-base' },
+                { icon: Megaphone, iconBg: 'bg-orange-100', iconColor: 'text-orange-500', label: 'Create Campaign', sub: 'Send WhatsApp broadcasts', href: '/campaigns' },
+              ].map((action) => (
+                <Link
+                  key={action.label}
+                  href={action.href}
+                  className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-all group"
+                >
+                  <div className={`w-8 h-8 rounded-lg ${action.iconBg} flex items-center justify-center flex-shrink-0`}>
+                    <action.icon className={`w-4 h-4 ${action.iconColor}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-gray-800 truncate">{action.label}</p>
+                    <p className="text-[11px] text-gray-400 truncate">{action.sub}</p>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-500 transition-colors" />
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

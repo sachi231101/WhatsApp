@@ -1,1423 +1,761 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import {
-  MessageSquare,
   Bot,
+  MessageSquare,
+  CheckCircle2,
+  Users,
   Play,
-  RotateCcw,
-  Check,
-  Edit2,
-  ExternalLink,
-  ChevronDown,
-  Globe,
-  Upload,
-  FileText,
-  Trash2,
+  Plus,
   Search,
-  Zap,
-  Sliders,
-  Sparkles,
-  ShieldCheck,
-  Clock,
-  Video,
+  Filter,
+  MoreVertical,
+  Edit2,
+  Headphones,
   Calendar,
+  GraduationCap,
+  FileText,
+  Sparkles,
+  BookOpen,
+  ArrowUpRight,
+  TrendingDown,
+  TrendingUp,
+  X,
   Send,
   Loader2,
-  CheckCircle2,
-  AlertTriangle,
-  ChevronRight,
-  Plus,
-  HelpCircle,
-  Volume2,
-  BookOpen,
-  Image as ImageIcon,
-  ShoppingBag,
-  CreditCard,
-  Target,
-  Settings,
-  X,
-  User,
-  Phone,
+  Check,
+  Tag,
+  Shield,
+  Zap,
 } from 'lucide-react';
-import type { AgentConfigData } from '@/app/api/ai/agent-config/route';
 
-export default function AiAgentsBuilderPage() {
-  const [loading, setLoading] = useState(true);
-  const [publishing, setPublishing] = useState(false);
-  const [publishSuccess, setPublishSuccess] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
+interface AgentCard {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  languages: string;
+  iconBg: string;
+  iconColor: string;
+  iconType: 'sales' | 'support' | 'leads' | 'admissions' | 'education' | 'finance' | 'documents';
+  status: 'Active' | 'Inactive' | 'Draft';
+  conversations: string;
+  resolutionRate: string;
+  humanHandoffs: string;
+}
 
-  // Active section for navigation
-  const [activeSection, setActiveSection] = useState('business-profile');
+const AGENTS_LIST: AgentCard[] = [
+  {
+    id: 'agent-1',
+    name: 'Sales Assistant',
+    description: 'Handles course inquiries, pricing, and enrollment conversations.',
+    category: 'Sales',
+    languages: 'English + Hindi',
+    iconBg: 'bg-emerald-50',
+    iconColor: 'text-emerald-600',
+    iconType: 'sales',
+    status: 'Active',
+    conversations: '4,832',
+    resolutionRate: '72%',
+    humanHandoffs: '124',
+  },
+  {
+    id: 'agent-2',
+    name: 'Customer Support Agent',
+    description: 'Answers student queries, solves issues, and provides support.',
+    category: 'Support',
+    languages: 'English',
+    iconBg: 'bg-blue-50',
+    iconColor: 'text-blue-600',
+    iconType: 'support',
+    status: 'Active',
+    conversations: '3,126',
+    resolutionRate: '64%',
+    humanHandoffs: '210',
+  },
+  {
+    id: 'agent-3',
+    name: 'Lead Qualification Agent',
+    description: 'Qualifies leads and identifies high-intent prospects.',
+    category: 'Lead Gen',
+    languages: 'English + Hindi',
+    iconBg: 'bg-purple-50',
+    iconColor: 'text-purple-600',
+    iconType: 'leads',
+    status: 'Active',
+    conversations: '2,948',
+    resolutionRate: '76%',
+    humanHandoffs: '56',
+  },
+  {
+    id: 'agent-4',
+    name: 'Admissions Agent',
+    description: 'Helps with admissions process, document requirements, and timelines.',
+    category: 'Admissions',
+    languages: 'English',
+    iconBg: 'bg-pink-50',
+    iconColor: 'text-pink-600',
+    iconType: 'admissions',
+    status: 'Active',
+    conversations: '1,842',
+    resolutionRate: '69%',
+    humanHandoffs: '92',
+  },
+  {
+    id: 'agent-5',
+    name: 'Course Information Agent',
+    description: 'Provides detailed information about courses, curriculum, and batches.',
+    category: 'Education',
+    languages: 'English + Hindi',
+    iconBg: 'bg-blue-50',
+    iconColor: 'text-blue-600',
+    iconType: 'education',
+    status: 'Active',
+    conversations: '1,284',
+    resolutionRate: '62%',
+    humanHandoffs: '88',
+  },
+  {
+    id: 'agent-6',
+    name: 'Payment & Finance Agent',
+    description: 'Handles payment queries, EMI options, and fee related questions.',
+    category: 'Finance',
+    languages: 'English',
+    iconBg: 'bg-orange-50',
+    iconColor: 'text-orange-600',
+    iconType: 'finance',
+    status: 'Active',
+    conversations: '986',
+    resolutionRate: '58%',
+    humanHandoffs: '104',
+  },
+  {
+    id: 'agent-7',
+    name: 'Document Support Agent',
+    description: 'Helps with document submission, verification, and requirements.',
+    category: 'Support',
+    languages: 'English',
+    iconBg: 'bg-purple-50',
+    iconColor: 'text-purple-600',
+    iconType: 'documents',
+    status: 'Inactive',
+    conversations: '624',
+    resolutionRate: '71%',
+    humanHandoffs: '42',
+  },
+];
 
-  // Agent configuration state
-  const [config, setConfig] = useState<AgentConfigData>({
-    agentName: 'Chat agent',
-    isPaused: true,
-    website: 'https://academyhunt.com',
-    businessName: 'Academy Hunt',
-    greetingMessage: 'Hello! Welcome to Academy Hunt. How can we help you today?',
-    currency: 'Not set',
-    businessType: 'Education',
-    whatBusinessDoes:
-      'Academy Hunt is a premier professional education institute offering certified courses in Artificial Intelligence, Full-Stack Development, Data Science, and Digital Marketing with 100% placement support.',
-    groundRules:
-      'Always remain polite, encouraging, and helpful. Never promise admissions without eligibility check. Always mention our upcoming scholarship batch and offer to book a 15-minute live counselling demo.',
-    tone: 'friendly',
-    responseLength: 'medium',
-    advancedTone:
-      'Use clear, accessible language. Include bullet points when explaining course curricula or fee structures.',
-    sources: [
+export default function AiAgentsPage() {
+  const [agents, setAgents] = useState<AgentCard[]>(AGENTS_LIST);
+  const [activeTab, setActiveTab] = useState<'all' | 'active' | 'inactive' | 'drafts'>('all');
+  const [search, setSearch] = useState('');
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // Playground state
+  const [playgroundAgent, setPlaygroundAgent] = useState<AgentCard | null>(null);
+  const [chatMessages, setChatMessages] = useState<{ sender: 'user' | 'agent'; text: string }[]>([
+    { sender: 'agent', text: 'Hello! I am your AI assistant. How can I assist you today?' },
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+
+  // Create/Edit Agent modal state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<AgentCard | null>(null);
+  const [formName, setFormName] = useState('');
+  const [formDesc, setFormDesc] = useState('');
+  const [formCategory, setFormCategory] = useState('Sales');
+  const [formLanguages, setFormLanguages] = useState('English + Hindi');
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const handleOpenPlayground = (agent: AgentCard) => {
+    setPlaygroundAgent(agent);
+    setChatMessages([
       {
-        id: 'src-1',
-        type: 'url',
-        name: 'academyhunt.com',
-        details: '1 website',
-        status: 'Ready',
+        sender: 'agent',
+        text: `Hello! I am ${agent.name}. How can I assist you today with ${agent.category.toLowerCase()}?`,
       },
-    ],
-    images: [
-      {
-        id: 'img-1',
-        title: 'Academy Hunt Campus',
-        url: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=600&auto=format&fit=crop&q=80',
-        enabled: true,
-      },
-      {
-        id: 'img-2',
-        title: 'AI Lab & Classroom',
-        url: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?w=600&auto=format&fit=crop&q=80',
-        enabled: true,
-      },
-      {
-        id: 'img-3',
-        title: 'Student Placements & Convocation',
-        url: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=600&auto=format&fit=crop&q=80',
-        enabled: true,
-      },
-      {
-        id: 'img-4',
-        title: 'Certification Badge',
-        url: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=600&auto=format&fit=crop&q=80',
-        enabled: true,
-      },
-    ],
-    skills: [
-      {
-        id: 'skill-faq',
-        title: 'FAQ / Support',
-        description:
-          'The contact asks a general question about the business — products, pricing, policies, hours, location, delivery areas, services, or "do you have/do you offer X". Use this whenever the answer should come from the business\'s own knowledge. Do NOT use it for order-specific lookups (use Order Status), for a buyer who wants to purchase/qualify (use Lead Qualification), or for returns (use Returns).',
-        enabled: true,
-      },
-      {
-        id: 'skill-handoff',
-        title: 'Human Handoff',
-        description:
-          'The contact explicitly asks for a human/agent/manager, is clearly frustrated after you\'ve tried to help, raises something out of the bot\'s scope, or the matter is sensitive (billing dispute, fraud, complaint, legal). Use it to hand off cleanly — not as an escape from questions you haven\'t tried to answer yet.',
-        enabled: true,
-      },
-      {
-        id: 'skill-demo',
-        title: 'Lead Qualification & Demo Booking',
-        description:
-          'Captures prospect name, WhatsApp number, course preferences, and books live product demos/counselling sessions directly into the Dashboard Calendar with conflict detection.',
-        enabled: true,
-      },
-    ],
+    ]);
+  };
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    const userText = chatInput.trim();
+    setChatMessages((prev) => [...prev, { sender: 'user', text: userText }]);
+    setChatInput('');
+    setChatLoading(true);
+
+    setTimeout(() => {
+      setChatLoading(false);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          sender: 'agent',
+          text: `Thank you for your question about "${userText}". As the ${playgroundAgent?.name || 'AI Agent'}, I can provide all details regarding curriculum, timing, and fee assistance. Would you like me to share the brochure?`,
+        },
+      ]);
+    }, 900);
+  };
+
+  const handleSaveAgent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formName.trim()) return;
+
+    if (editingAgent) {
+      setAgents((prev) =>
+        prev.map((a) =>
+          a.id === editingAgent.id
+            ? {
+                ...a,
+                name: formName,
+                description: formDesc,
+                category: formCategory,
+                languages: formLanguages,
+              }
+            : a
+        )
+      );
+      showToast('Agent updated successfully!');
+    } else {
+      const newAgent: AgentCard = {
+        id: `agent-${Date.now()}`,
+        name: formName,
+        description: formDesc || 'Handles customer conversations intelligently.',
+        category: formCategory,
+        languages: formLanguages,
+        iconBg: 'bg-blue-50',
+        iconColor: 'text-blue-600',
+        iconType: 'support',
+        status: 'Active',
+        conversations: '0',
+        resolutionRate: '100%',
+        humanHandoffs: '0',
+      };
+      setAgents((prev) => [newAgent, ...prev]);
+      showToast('AI Agent created successfully!');
+    }
+
+    setShowCreateModal(false);
+    setEditingAgent(null);
+    setFormName('');
+    setFormDesc('');
+  };
+
+  const handleEditClick = (agent: AgentCard) => {
+    setEditingAgent(agent);
+    setFormName(agent.name);
+    setFormDesc(agent.description);
+    setFormCategory(agent.category);
+    setFormLanguages(agent.languages);
+    setShowCreateModal(true);
+  };
+
+  const filteredAgents = agents.filter((a) => {
+    if (activeTab === 'active' && a.status !== 'Active') return false;
+    if (activeTab === 'inactive' && a.status !== 'Inactive') return false;
+    if (activeTab === 'drafts' && a.status !== 'Draft') return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (
+        a.name.toLowerCase().includes(q) ||
+        a.description.toLowerCase().includes(q) ||
+        a.category.toLowerCase().includes(q)
+      );
+    }
+    return true;
   });
 
-  // UI Modals & Add Source states
-  const [editingName, setEditingName] = useState(false);
-  const [imageSearch, setImageSearch] = useState('');
-  const [advancedToneOpen, setAdvancedToneOpen] = useState(false);
-  const [addSourceModalOpen, setAddSourceModalOpen] = useState(false);
-  const [sourceType, setSourceType] = useState<'url' | 'file' | 'text'>('url');
-  const [sourceInput, setSourceInput] = useState('');
-
-  // Right Drawer: "Test your Agent" Simulator state
-  const [isTestDrawerVisible, setIsTestDrawerVisible] = useState(true);
-  const [testTab, setTestTab] = useState<'train' | 'live'>('train');
-  const [chatInput, setChatInput] = useState('');
-  const [simulating, setSimulating] = useState(false);
-  const [messages, setMessages] = useState<
-    Array<{
-      role: 'user' | 'assistant';
-      text: string;
-      booking?: any;
-      conflictResolved?: boolean;
-    }>
-  >([
-    {
-      role: 'assistant',
-      text: 'Hello! 👋 I am your Academy Hunt AI Agent. Ask me anything about our courses, fees, or ask me to schedule a live counselling demo!',
-    },
-  ]);
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Load config on mount
-  useEffect(() => {
-    async function loadConfig() {
-      try {
-        const res = await fetch('/api/ai/agent-config');
-        if (res.ok) {
-          const json = await res.json();
-          if (json.data) {
-            setConfig((prev) => ({ ...prev, ...json.data }));
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching agent config:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadConfig();
-  }, []);
-
-  // Scroll messages to bottom
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, simulating]);
-
-  // Handle Save / Publish
-  const handlePublish = async () => {
-    setPublishing(true);
-    try {
-      const res = await fetch('/api/ai/agent-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-      if (res.ok) {
-        setPublishSuccess(true);
-        setTimeout(() => setPublishSuccess(false), 2500);
-      }
-    } catch (err) {
-      console.error('Error publishing agent config:', err);
-    } finally {
-      setPublishing(false);
+  const getAgentIcon = (type: AgentCard['iconType']) => {
+    switch (type) {
+      case 'sales':
+        return <Zap className="w-5 h-5 text-emerald-600" />;
+      case 'support':
+        return <Headphones className="w-5 h-5 text-blue-600" />;
+      case 'leads':
+        return <Users className="w-5 h-5 text-purple-600" />;
+      case 'admissions':
+        return <Calendar className="w-5 h-5 text-pink-600" />;
+      case 'education':
+        return <GraduationCap className="w-5 h-5 text-blue-600" />;
+      case 'finance':
+        return <span className="font-bold text-lg text-orange-600">₹</span>;
+      case 'documents':
+        return <FileText className="w-5 h-5 text-purple-600" />;
+      default:
+        return <Bot className="w-5 h-5 text-blue-600" />;
     }
   };
-
-  // Toggle Pause/Live
-  const handleTogglePause = async () => {
-    const updated = { ...config, isPaused: !config.isPaused };
-    setConfig(updated);
-    try {
-      await fetch('/api/ai/agent-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
-      });
-    } catch (err) {
-      console.error('Failed to toggle pause status:', err);
-    }
-  };
-
-  // Regenerate from site
-  const handleRegenerateFromSite = async () => {
-    if (!config.website) return;
-    setRegenerating(true);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1400));
-      setConfig((prev) => ({
-        ...prev,
-        businessName: prev.businessName || 'Academy Hunt',
-        whatBusinessDoes:
-          'Academy Hunt provides industry-accredited training in Generative AI, Full-Stack Engineering, Cloud Architecture, and Data Science. Students gain hands-on portfolio projects, 1-on-1 mentorship, and placement assistance.',
-        groundRules:
-          '1. Always clarify eligibility and prerequisites before enrolling.\n2. Emphasize live weekend batches and corporate certifications.\n3. Proactively offer to schedule a live 1-on-1 demo with our senior academic counsellor.',
-      }));
-    } finally {
-      setRegenerating(false);
-    }
-  };
-
-  // Toggle skill
-  const toggleSkill = (id: string) => {
-    setConfig((prev) => ({
-      ...prev,
-      skills: prev.skills.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)),
-    }));
-  };
-
-  // Toggle image
-  const toggleImage = (id: string) => {
-    setConfig((prev) => ({
-      ...prev,
-      images: prev.images.map((img) => (img.id === id ? { ...img, enabled: !img.enabled } : img)),
-    }));
-  };
-
-  // Simulator send message
-  const handleSendMessage = async (customText?: string) => {
-    const query = (customText || chatInput).trim();
-    if (!query || simulating) return;
-
-    const userMsg = { role: 'user' as const, text: query };
-    setMessages((prev) => [...prev, userMsg]);
-    setChatInput('');
-    setSimulating(true);
-
-    try {
-      const res = await fetch('/api/ai/agents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: query,
-          conversationHistory: messages.map((m) => ({ role: m.role, text: m.text })),
-          prospectName: 'Test Student',
-          prospectPhone: '+91 98765 43210',
-          businessContext: `${config.businessName}. ${config.whatBusinessDoes} Rules: ${config.groundRules}`,
-        }),
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            text: json.data?.reply || 'Understood. How else can I assist you?',
-            booking: json.data?.booking,
-            conflictResolved: json.data?.conflictResolved,
-          },
-        ]);
-
-        if (json.data.isDemoBooked && typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('wazzapp:notification-update'));
-        }
-      }
-    } catch (err) {
-      console.error('Test chat error:', err);
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', text: 'Sorry, I encountered an issue. Please try again.' },
-      ]);
-    } finally {
-      setSimulating(false);
-    }
-  };
-
-  // Add source helper
-  const handleAddSource = () => {
-    if (!sourceInput.trim()) return;
-    const newSrc = {
-      id: 'src-' + Date.now(),
-      type: sourceType,
-      name: sourceInput.trim(),
-      details:
-        sourceType === 'url'
-          ? '1 website'
-          : sourceType === 'file'
-          ? 'Uploaded document'
-          : 'Pasted text source',
-      status: 'Ready' as const,
-    };
-    setConfig((prev) => ({ ...prev, sources: [...prev.sources, newSrc] }));
-    setSourceInput('');
-    setAddSourceModalOpen(false);
-  };
-
-  const handleDeleteSource = (id: string) => {
-    setConfig((prev) => ({ ...prev, sources: prev.sources.filter((s) => s.id !== id) }));
-  };
-
-  const navItems = [
-    { id: 'business-profile', label: 'Business Profile' },
-    { id: 'knowledge', label: 'Knowledge' },
-    { id: 'images', label: 'Images' },
-    { id: 'skills', label: 'Skills' },
-    { id: 'products', label: 'Products' },
-    { id: 'payments', label: 'Payments' },
-    { id: 'meta-ads', label: 'Meta Ads' },
-    { id: 'settings', label: 'Settings' },
-  ];
-
-  const filteredImages = config.images.filter((img) =>
-    img.title.toLowerCase().includes(imageSearch.toLowerCase())
-  );
-
-  const enabledImagesCount = config.images.filter((img) => img.enabled).length;
 
   return (
-    <div className="-m-6 h-[calc(100vh-64px)] flex flex-col overflow-hidden bg-[#f4f5f8] text-slate-800 antialiased font-sans">
-      {/* ─── 1. TOP HEADER BAR ──────────────────────────────────────────────── */}
-      <header className="h-16 px-6 bg-white border-b border-slate-200 flex items-center justify-between flex-shrink-0 z-20 shadow-xs">
-        {/* Left: Agent Name with Edit Pencil */}
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#0b3d36] flex items-center justify-center text-white shadow-sm">
-            <MessageSquare className="w-5 h-5 fill-white" />
-          </div>
-
-          {editingName ? (
-            <div className="flex items-center gap-1.5">
-              <input
-                type="text"
-                value={config.agentName}
-                onChange={(e) => setConfig({ ...config, agentName: e.target.value })}
-                onBlur={() => setEditingName(false)}
-                onKeyDown={(e) => e.key === 'Enter' && setEditingName(false)}
-                autoFocus
-                className="bg-white border border-[#0b3d36] rounded-md px-2 py-0.5 text-base font-semibold text-slate-900 focus:outline-none"
-              />
-              <button
-                onClick={() => setEditingName(false)}
-                className="p-1 text-[#0b3d36] hover:text-[#082e29]"
-              >
-                <Check className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <div
-              className="flex items-center gap-2 group cursor-pointer"
-              onClick={() => setEditingName(true)}
-            >
-              <h1 className="text-base font-bold text-slate-900 group-hover:text-[#0b3d36] transition-colors">
-                {config.agentName}
-              </h1>
-              <Edit2 className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors" />
-            </div>
-          )}
-
-          {/* Inline Pause status indicator */}
-          <div className="hidden sm:flex items-center gap-2 ml-4 text-xs font-medium text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
-            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-            <span>AI paused — turn on to go live</span>
-          </div>
+    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      {/* Toast Notification */}
+      {toastMsg && (
+        <div className="fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl bg-emerald-600 text-white font-semibold text-sm shadow-2xl shadow-emerald-500/30 animate-in fade-in slide-in-from-top-4">
+          <CheckCircle2 className="w-5 h-5" />
+          <span>{toastMsg}</span>
         </div>
+      )}
 
-        {/* Right: Actions (Test, Published, Reload) */}
-        <div className="flex items-center gap-2.5">
-          {/* Test Button */}
-          <button
-            onClick={() => setIsTestDrawerVisible(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all cursor-pointer shadow-2xs"
-          >
-            <Play className="w-3 h-3 fill-slate-700" />
-            <span>Test</span>
-          </button>
-
-          {/* Published / Save Button */}
-          <button
-            onClick={handlePublish}
-            disabled={publishing}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-xs ${
-              publishSuccess
-                ? 'bg-emerald-600 text-white'
-                : 'bg-[#0b3d36] hover:bg-[#082e29] text-white'
-            }`}
-          >
-            {publishing ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-            )}
-            <span>{publishSuccess ? 'Saved' : 'Published'}</span>
-          </button>
-
-          {/* Refresh button */}
-          <button
-            onClick={() => window.location.reload()}
-            className="p-1.5 rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all cursor-pointer"
-            title="Reload config"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </header>
-
-      {/* ─── 2. GLOBAL ALERT WARNING BANNER ─────────────────────────────────── */}
-      <div
-        className={`px-6 py-2 border-b text-xs flex items-center justify-between flex-shrink-0 transition-colors ${
-          config.isPaused
-            ? 'bg-[#fff9e6] border-amber-200 text-[#78350f]'
-            : 'bg-[#ecfdf5] border-emerald-200 text-[#065f46]'
-        }`}
-      >
-        <div className="flex items-center gap-2.5 font-medium">
-          <div
-            className={`w-4 h-4 rounded-full flex items-center justify-center text-white text-[10px] font-bold ${
-              config.isPaused ? 'bg-amber-600' : 'bg-emerald-600'
-            }`}
-          >
-            i
-          </div>
-          <span>
-            {config.isPaused
-              ? "AI is paused. Your agent isn't replying on WhatsApp — config is safe and editable. Turn AI on to go live."
-              : 'AI is live. Your agent is replying to incoming WhatsApp messages and booking demos into your dashboard calendar.'}
-          </span>
-        </div>
-        <button
-          onClick={handleTogglePause}
-          className={`font-semibold hover:underline ml-4 flex-shrink-0 cursor-pointer ${
-            config.isPaused ? 'text-amber-800' : 'text-emerald-800'
-          }`}
-        >
-          {config.isPaused ? 'Turn AI on to go live' : 'Pause AI'}
-        </button>
-      </div>
-
-      {/* ─── 3. THREE-COLUMN BUILDER WORKSPACE ───────────────────────────────── */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* ─── LEFT COLUMN: Sticky Navigation ("ON THIS PAGE") ──────────────── */}
-        <aside className="w-56 flex-shrink-0 bg-white border-r border-slate-200 p-4 flex flex-col gap-0.5 select-none overflow-y-auto">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 px-3">
-            On this page
+      {/* ── Page Header ──────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">AI Agents</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Create and manage AI agents that handle your WhatsApp conversations.
           </p>
-          {navItems.map((item) => {
-            const isActive = activeSection === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActiveSection(item.id);
-                  const el = document.getElementById(item.id);
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className={`flex items-center px-3 py-2 text-xs text-left rounded-md transition-all cursor-pointer relative ${
-                  isActive
-                    ? 'text-[#0b3d36] font-bold bg-[#f0f9f6]'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                {isActive && (
-                  <span className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-[#0b3d36] rounded-r" />
-                )}
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </aside>
-
-        {/* ─── MIDDLE COLUMN: Configuration Canvas ─────────────────────────── */}
-        <main className="flex-1 overflow-y-auto p-8 space-y-6 bg-[#f8fafc] min-w-0">
-          {/* ──── SECTION 1: BUSINESS PROFILE ──────────────────────────────── */}
-          <section
-            id="business-profile"
-            className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs space-y-5"
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => handleOpenPlayground(agents[0])}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-all shadow-sm"
           >
-            {/* Header */}
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#e8f5e9] text-[#0b3d36] flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Globe className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Business Profile</h2>
-                <p className="text-xs text-slate-500">
-                  Add the basic details and instructions your Agent needs to represent your
-                  business accurately.
-                </p>
-              </div>
-            </div>
-
-            {/* Website row */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                Website
-                <HelpCircle className="w-3 h-3 text-slate-400" />
-              </label>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 relative">
-                  <Globe className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="url"
-                    value={config.website}
-                    onChange={(e) => setConfig({ ...config, website: e.target.value })}
-                    placeholder="https://yourwebsite.com"
-                    className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 font-medium focus:bg-white focus:border-[#0b3d36] focus:outline-none"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleRegenerateFromSite}
-                  disabled={regenerating}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[#0b3d36] text-[#0b3d36] hover:bg-[#0b3d36]/5 text-xs font-semibold transition-all cursor-pointer flex-shrink-0"
-                >
-                  <RotateCcw className={`w-3.5 h-3.5 ${regenerating ? 'animate-spin' : ''}`} />
-                  <span>{regenerating ? 'Crawling...' : 'Regenerate from site'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* 2-col: Agent/Business name & Greeting message */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                  Agent / business name
-                  <HelpCircle className="w-3 h-3 text-slate-400" />
-                </label>
-                <input
-                  type="text"
-                  value={config.businessName}
-                  onChange={(e) => setConfig({ ...config, businessName: e.target.value })}
-                  placeholder="How the agent introduces itself"
-                  className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium focus:bg-white focus:border-[#0b3d36] focus:outline-none"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                  Greeting message (optional)
-                  <HelpCircle className="w-3 h-3 text-slate-400" />
-                </label>
-                <input
-                  type="text"
-                  value={config.greetingMessage}
-                  onChange={(e) => setConfig({ ...config, greetingMessage: e.target.value })}
-                  placeholder="Sent word-for-word as the first reply"
-                  className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium focus:bg-white focus:border-[#0b3d36] focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {/* 2-col: Store currency & Business type */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                  Store currency
-                </label>
-                <select
-                  value={config.currency}
-                  onChange={(e) => setConfig({ ...config, currency: e.target.value })}
-                  className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-medium focus:bg-white focus:border-[#0b3d36] focus:outline-none"
-                >
-                  <option value="Not set">Not set</option>
-                  <option value="INR">INR (₹)</option>
-                  <option value="USD">USD ($)</option>
-                  <option value="EUR">EUR (€)</option>
-                  <option value="AED">AED (د.إ)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                  Business type
-                  <HelpCircle className="w-3 h-3 text-slate-400" />
-                </label>
-                <select
-                  value={config.businessType}
-                  onChange={(e) => setConfig({ ...config, businessType: e.target.value })}
-                  className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-medium focus:bg-white focus:border-[#0b3d36] focus:outline-none"
-                >
-                  <option value="Education">Education</option>
-                  <option value="E-Commerce">E-Commerce & Retail</option>
-                  <option value="Healthcare">Healthcare & Wellness</option>
-                  <option value="Real Estate">Real Estate</option>
-                  <option value="Financial Services">Financial Services</option>
-                  <option value="B2B SaaS">B2B SaaS</option>
-                  <option value="Consultancy">Professional Services / Consultancy</option>
-                </select>
-              </div>
-            </div>
-
-            {/* What the business does */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                What the business does
-                <HelpCircle className="w-3 h-3 text-slate-400" />
-              </label>
-              <textarea
-                rows={3}
-                value={config.whatBusinessDoes}
-                onChange={(e) => setConfig({ ...config, whatBusinessDoes: e.target.value })}
-                placeholder='Describe what the business does, or click "Regenerate from site" to draft it from your website.'
-                className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg p-3 text-xs text-slate-900 focus:bg-white focus:border-[#0b3d36] focus:outline-none leading-relaxed"
-              />
-            </div>
-
-            {/* Ground rules */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                Ground rules
-                <HelpCircle className="w-3 h-3 text-slate-400" />
-              </label>
-              <textarea
-                rows={3}
-                value={config.groundRules}
-                onChange={(e) => setConfig({ ...config, groundRules: e.target.value })}
-                placeholder="Rules your agent must always follow — e.g. Never promise same-day delivery. Always mention the festive 15% off above ₹1,000."
-                className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg p-3 text-xs text-slate-900 focus:bg-white focus:border-[#0b3d36] focus:outline-none leading-relaxed"
-              />
-            </div>
-          </section>
-
-          {/* ──── SECTION 2: TONE ──────────────────────────────────────────── */}
-          <section className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs space-y-5">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#e8f5e9] text-[#0b3d36] flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Volume2 className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Tone</h2>
-                <p className="text-xs text-slate-500">How your agent sounds.</p>
-              </div>
-            </div>
-
-            {/* 4 Tone Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[
-                {
-                  id: 'friendly',
-                  title: 'Friendly',
-                  desc: "Warm, upbeat, uses the customer's name.",
-                },
-                {
-                  id: 'professional',
-                  title: 'Professional',
-                  desc: 'Polished and concise. Minimal slang.',
-                },
-                {
-                  id: 'concise',
-                  title: 'Concise',
-                  desc: 'Short, to the point, action-first.',
-                },
-                {
-                  id: 'playful',
-                  title: 'Playful',
-                  desc: 'Light, a little cheeky, the odd emoji.',
-                },
-              ].map((tone) => {
-                const isSelected = config.tone === tone.id;
-                return (
-                  <div
-                    key={tone.id}
-                    onClick={() => setConfig({ ...config, tone: tone.id as any })}
-                    className={`p-3.5 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
-                      isSelected
-                        ? 'border-[#0b3d36] bg-[#f0f9f6] ring-1 ring-[#0b3d36]'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span
-                        className={`text-xs font-bold ${
-                          isSelected ? 'text-[#0b3d36]' : 'text-slate-800'
-                        }`}
-                      >
-                        {tone.title}
-                        {isSelected && ' ✓'}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 leading-snug">{tone.desc}</p>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Response Length */}
-            <div className="space-y-2 pt-2 border-t border-slate-100">
-              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                Response length
-                <HelpCircle className="w-3 h-3 text-slate-400" />
-              </label>
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { id: 'short', title: 'Short', desc: 'A line or two.' },
-                  { id: 'medium', title: 'Medium', desc: 'Balanced replies.' },
-                  { id: 'long', title: 'Long', desc: 'Thorough when it helps.' },
-                ].map((len) => {
-                  const isSelected = config.responseLength === len.id;
-                  return (
-                    <div
-                      key={len.id}
-                      onClick={() => setConfig({ ...config, responseLength: len.id as any })}
-                      className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
-                        isSelected
-                          ? 'border-[#0b3d36] bg-[#f0f9f6] ring-1 ring-[#0b3d36]'
-                          : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span
-                          className={`text-xs font-bold ${
-                            isSelected ? 'text-[#0b3d36]' : 'text-slate-800'
-                          }`}
-                        >
-                          {len.title}
-                        </span>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-[#0b3d36]" />}
-                      </div>
-                      <p className="text-[11px] text-slate-500">{len.desc}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Advanced tone settings collapsible */}
-            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-              <button
-                type="button"
-                onClick={() => setAdvancedToneOpen(!advancedToneOpen)}
-                className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors text-left"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Sliders className="w-4 h-4 text-slate-500" />
-                  <div>
-                    <span className="text-xs font-semibold text-slate-800 flex items-center gap-1">
-                      Advanced tone settings
-                      <HelpCircle className="w-3 h-3 text-slate-400" />
-                    </span>
-                    <p className="text-[11px] text-slate-500">
-                      Add custom instructions for how your agent should communicate.
-                    </p>
-                  </div>
-                </div>
-                <ChevronDown
-                  className={`w-4 h-4 text-slate-400 transition-transform ${
-                    advancedToneOpen ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
-
-              {advancedToneOpen && (
-                <div className="p-4 border-t border-slate-200 bg-slate-50">
-                  <textarea
-                    rows={2}
-                    value={config.advancedTone}
-                    onChange={(e) => setConfig({ ...config, advancedTone: e.target.value })}
-                    placeholder="E.g., Always use cheerful greetings. If user speaks Hindi or Hinglish, reply in Hinglish."
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:border-[#0b3d36] focus:outline-none"
-                  />
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* ──── SECTION 3: KNOWLEDGE ─────────────────────────────────────── */}
-          <section
-            id="knowledge"
-            className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs space-y-5"
+            <Play className="w-3.5 h-3.5 text-gray-600" />
+            Test Playground
+          </button>
+          <button
+            onClick={() => {
+              setEditingAgent(null);
+              setFormName('');
+              setFormDesc('');
+              setShowCreateModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-[#1b59f8] text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition-all shadow-sm shadow-blue-500/25"
           >
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#e8f5e9] text-[#0b3d36] flex items-center justify-center flex-shrink-0 mt-0.5">
-                <BookOpen className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Knowledge</h2>
-                <p className="text-xs text-slate-500">
-                  Knowledge is the information your Agent uses to answer business-specific
-                  questions. Add only accurate and up-to-date sources.
-                </p>
-              </div>
+            <Plus className="w-4 h-4" />
+            Create AI Agent
+          </button>
+        </div>
+      </div>
+
+      {/* ── 4 Metric Cards ───────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1 */}
+        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center justify-between">
+          <div>
+            <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center mb-2">
+              <Bot className="w-4.5 h-4.5 text-purple-600" style={{ width: 18, height: 18 }} />
             </div>
-
-            {/* 3 Action Tiles */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div
-                onClick={() => {
-                  setSourceType('url');
-                  setAddSourceModalOpen(true);
-                }}
-                className="p-4 rounded-xl border border-slate-200 hover:border-[#0b3d36] hover:bg-[#f0f9f6]/40 transition-all cursor-pointer"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Globe className="w-4 h-4 text-[#0b3d36]" />
-                  <span className="text-xs font-bold text-slate-900">Crawl a page</span>
-                </div>
-                <p className="text-[11px] text-slate-500">Any public URL on your site</p>
-              </div>
-
-              <div
-                onClick={() => {
-                  setSourceType('file');
-                  setAddSourceModalOpen(true);
-                }}
-                className="p-4 rounded-xl border border-slate-200 hover:border-[#0b3d36] hover:bg-[#f0f9f6]/40 transition-all cursor-pointer"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Upload className="w-4 h-4 text-[#0b3d36]" />
-                  <span className="text-xs font-bold text-slate-900">Upload files</span>
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  PDF, DOC, TXT, CSV · 50 MB each · PDFs up to 30 pages
-                </p>
-              </div>
-
-              <div
-                onClick={() => {
-                  setSourceType('text');
-                  setAddSourceModalOpen(true);
-                }}
-                className="p-4 rounded-xl border border-slate-200 hover:border-[#0b3d36] hover:bg-[#f0f9f6]/40 transition-all cursor-pointer"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <FileText className="w-4 h-4 text-[#0b3d36]" />
-                  <span className="text-xs font-bold text-slate-900">Paste text</span>
-                </div>
-                <p className="text-[11px] text-slate-500">Policies, scripts, price lists</p>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-slate-400">
-              Files: PDF, DOC, DOCX, TXT, CSV · up to 50 MB each · PDFs up to 30 pages
+            <p className="text-xs text-gray-500 font-medium">Active AI Agents</p>
+            <p className="text-2xl font-bold text-gray-900 mt-0.5">8</p>
+            <p className="text-[11px] font-semibold text-green-600 flex items-center gap-1 mt-1">
+              <span>↑</span> 2 more than last month
             </p>
+          </div>
+        </div>
 
-            {/* Sources List */}
-            <div className="space-y-2 pt-2">
-              <h3 className="text-xs font-bold text-slate-800">
-                {config.sources.length} {config.sources.length === 1 ? 'source' : 'sources'}
-              </h3>
-
-              <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
-                {config.sources.map((src) => (
-                  <div
-                    key={src.id}
-                    className="px-4 py-3 bg-white flex items-center justify-between hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                      <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
-                        {src.type === 'url' ? (
-                          <Globe className="w-3.5 h-3.5" />
-                        ) : src.type === 'file' ? (
-                          <Upload className="w-3.5 h-3.5" />
-                        ) : (
-                          <FileText className="w-3.5 h-3.5" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-slate-900">{src.name}</p>
-                        <p className="text-[10px] text-slate-500">{src.details}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <span className="px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 bg-emerald-50 rounded-md border border-emerald-200">
-                        {src.status}
-                      </span>
-                      <button
-                        onClick={() => handleDeleteSource(src.id)}
-                        className="p-1 text-slate-400 hover:text-red-600 transition-colors"
-                        title="Delete source"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* Card 2 */}
+        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center justify-between">
+          <div>
+            <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center mb-2">
+              <MessageSquare className="w-4.5 h-4.5 text-blue-600" style={{ width: 18, height: 18 }} />
             </div>
-          </section>
+            <p className="text-xs text-gray-500 font-medium">Conversations Handled</p>
+            <p className="text-2xl font-bold text-gray-900 mt-0.5">12,486</p>
+            <p className="text-[11px] font-semibold text-green-600 flex items-center gap-1 mt-1">
+              <span>↑</span> 28% vs last month
+            </p>
+          </div>
+        </div>
 
-          {/* ──── SECTION 4: IMAGES ────────────────────────────────────────── */}
-          <section
-            id="images"
-            className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs space-y-4"
-          >
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#e8f5e9] text-[#0b3d36] flex items-center justify-center flex-shrink-0 mt-0.5">
-                <ImageIcon className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Images</h2>
-                <p className="text-xs text-slate-500">
-                  Images your agent may send — uncheck any it shouldn't.
-                </p>
-              </div>
+        {/* Card 3 */}
+        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center justify-between">
+          <div>
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center mb-2">
+              <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600" style={{ width: 18, height: 18 }} />
             </div>
+            <p className="text-xs text-gray-500 font-medium">Resolution Rate</p>
+            <p className="text-2xl font-bold text-gray-900 mt-0.5">68%</p>
+            <p className="text-[11px] font-semibold text-green-600 flex items-center gap-1 mt-1">
+              <span>↑</span> 12% vs last month
+            </p>
+          </div>
+        </div>
 
-            {/* Search + count */}
-            <div className="flex items-center justify-between gap-4 pt-1">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  placeholder="Search images..."
-                  value={imageSearch}
-                  onChange={(e) => setImageSearch(e.target.value)}
-                  className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:border-[#0b3d36] focus:outline-none"
-                />
-              </div>
-
-              <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
-                {enabledImagesCount} of {config.images.length} enabled
-              </span>
+        {/* Card 4 */}
+        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center justify-between">
+          <div>
+            <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center mb-2">
+              <Users className="w-4.5 h-4.5 text-blue-600" style={{ width: 18, height: 18 }} />
             </div>
+            <p className="text-xs text-gray-500 font-medium">Human Handoffs</p>
+            <p className="text-2xl font-bold text-gray-900 mt-0.5">432</p>
+            <p className="text-[11px] font-semibold text-rose-500 flex items-center gap-1 mt-1">
+              <span>↓</span> 8% vs last month
+            </p>
+          </div>
+        </div>
+      </div>
 
-            {/* Image Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-              {filteredImages.map((img) => (
-                <div
-                  key={img.id}
-                  onClick={() => toggleImage(img.id)}
-                  className={`group relative rounded-xl overflow-hidden border transition-all cursor-pointer aspect-4/3 bg-slate-100 ${
-                    img.enabled
-                      ? 'border-[#0b3d36] ring-2 ring-[#0b3d36]/30'
-                      : 'border-slate-200 opacity-50 grayscale'
-                  }`}
-                >
-                  <img
-                    src={img.url}
-                    alt={img.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-
-                  {/* Title overlay */}
-                  <p className="absolute bottom-1.5 left-2 right-2 text-[10px] font-semibold text-white truncate">
-                    {img.title}
-                  </p>
-
-                  {/* Checkbox indicator */}
-                  <div
-                    className={`absolute top-2 right-2 w-5 h-5 rounded-md flex items-center justify-center transition-colors shadow-sm ${
-                      img.enabled ? 'bg-[#0b3d36] text-white' : 'bg-white/80 text-transparent'
-                    }`}
-                  >
-                    <Check className="w-3 h-3 stroke-[2.5]" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* ──── SECTION 5: SKILLS ────────────────────────────────────────── */}
-          <section
-            id="skills"
-            className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs space-y-4"
-          >
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#e8f5e9] text-[#0b3d36] flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Zap className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Skills</h2>
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  Skills define the tasks your Agent can perform, such as answering FAQs, qualifying
-                  leads, collecting customer details or handing conversations over to your team.
-                  Enable a prebuilt skill or create a custom one based on your business needs.{' '}
-                  <span className="text-[#0b3d36] font-semibold underline cursor-pointer">
-                    learn how to create and configure a new skill
-                  </span>
-                  .
-                </p>
-              </div>
-            </div>
-
-            {/* Enabled badge & subtitle */}
-            <div className="flex items-center gap-2 pt-1">
-              <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                {config.skills.filter((s) => s.enabled).length} enabled
-              </span>
-              <span className="text-xs text-slate-500">
-                The jobs your agent does. Expand one to configure its variables, templates and ads.
-              </span>
-            </div>
-
-            {/* + Add Skills Button */}
+      {/* ── Filter Tabs & Search Bar ─────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200/80 pb-3">
+        {/* Tabs */}
+        <div className="flex items-center gap-6 text-xs font-semibold">
+          {[
+            { key: 'all', label: `All Agents (${agents.length + 1})` },
+            { key: 'active', label: `Active (${agents.filter((a) => a.status === 'Active').length})` },
+            { key: 'inactive', label: `Inactive (${agents.filter((a) => a.status === 'Inactive').length})` },
+            { key: 'drafts', label: 'Drafts (1)' },
+          ].map((tab) => (
             <button
-              type="button"
-              className="w-full py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as any)}
+              className={`pb-2.5 transition-all relative ${
+                activeTab === tab.key ? 'text-[#1b59f8]' : 'text-gray-500 hover:text-gray-800'
+              }`}
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Skills</span>
+              {tab.label}
+              {activeTab === tab.key && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1b59f8] rounded-full" />
+              )}
             </button>
+          ))}
+        </div>
 
-            {/* Skills List */}
-            <div className="space-y-3 pt-1">
-              {config.skills.map((skill) => (
+        {/* Search & Filter */}
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search agents..."
+              className="pl-8 pr-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 w-52 placeholder-gray-400"
+            />
+          </div>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all">
+            <Filter className="w-3.5 h-3.5 text-gray-500" />
+            Filter
+          </button>
+        </div>
+      </div>
+
+      {/* ── 8 Agent Cards Grid (4 Columns) ───────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        {filteredAgents.map((agent) => (
+          <div
+            key={agent.id}
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col justify-between hover:shadow-md transition-shadow"
+          >
+            <div>
+              {/* Card Header: Icon + Status Pill + More */}
+              <div className="flex items-center justify-between mb-3.5">
                 <div
-                  key={skill.id}
-                  className={`p-4 rounded-xl border transition-all ${
-                    skill.enabled
-                      ? 'border-slate-200 bg-white hover:border-slate-300 shadow-2xs'
-                      : 'border-slate-200 bg-slate-50/60 opacity-60'
-                  }`}
+                  className={`w-10 h-10 rounded-xl ${agent.iconBg} flex items-center justify-center flex-shrink-0`}
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-3">
-                      <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <Zap className="w-3.5 h-3.5" />
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-900">{skill.title}</h4>
-                        <p className="text-[11px] text-slate-500 leading-relaxed mt-1">
-                          {skill.description}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Right toggles: Sliders & Checkbox */}
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                        title="Configure Skill"
-                      >
-                        <Sliders className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => toggleSkill(skill.id)}
-                        className={`w-5 h-5 rounded-md flex items-center justify-center transition-colors cursor-pointer ${
-                          skill.enabled
-                            ? 'bg-[#0b3d36] text-white'
-                            : 'border border-slate-300 bg-white text-transparent'
-                        }`}
-                      >
-                        <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                      </button>
-                    </div>
-                  </div>
+                  {getAgentIcon(agent.iconType)}
                 </div>
-              ))}
-            </div>
-          </section>
-
-          {/* ──── SECTIONS 6+: PRODUCTS, PAYMENTS, META ADS, SETTINGS ──────── */}
-          <section
-            id="products"
-            className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs space-y-3"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#e8f5e9] text-[#0b3d36] flex items-center justify-center">
-                <ShoppingBag className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Products & Catalog</h3>
-                <p className="text-xs text-slate-500">
-                  Connect your Meta Commerce catalog to enable live WhatsApp product cards.
-                </p>
-              </div>
-            </div>
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600">
-              Synced with Academy Hunt Courses: 14 Active Programs & Degree Modules.
-            </div>
-          </section>
-
-          <section
-            id="payments"
-            className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs space-y-3"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#e8f5e9] text-[#0b3d36] flex items-center justify-center">
-                <CreditCard className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Payments & WhatsApp Pay</h3>
-                <p className="text-xs text-slate-500">
-                  Enable native in-chat payments via UPI, Razorpay, or Stripe.
-                </p>
-              </div>
-            </div>
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600">
-              Ready for UPI Instant Checkout (₹1,000 reservation tokens & scholarship applications).
-            </div>
-          </section>
-
-          <section
-            id="meta-ads"
-            className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs space-y-3"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#e8f5e9] text-[#0b3d36] flex items-center justify-center">
-                <Target className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Meta Ads (Click-to-WhatsApp)</h3>
-                <p className="text-xs text-slate-500">
-                  Auto-route leads from Facebook and Instagram ads directly into demo qualification.
-                </p>
-              </div>
-            </div>
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600">
-              Active: Leads clicking on Academy Hunt Meta Ads automatically launch the AI Demo
-              Booking workflow.
-            </div>
-          </section>
-
-          <section
-            id="settings"
-            className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs space-y-3"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#e8f5e9] text-[#0b3d36] flex items-center justify-center">
-                <Settings className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Advanced Agent Settings</h3>
-                <p className="text-xs text-slate-500">
-                  Model parameters, fallback latency, human team notification webhooks.
-                </p>
-              </div>
-            </div>
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600">
-              Powered by Llama-3 70B & Gemini Pro with Real-Time Database Calendar Sync.
-            </div>
-          </section>
-        </main>
-
-        {/* ─── RIGHT COLUMN: "Test your Agent" Simulator ───────────────────── */}
-        {isTestDrawerVisible && (
-          <aside className="w-[380px] lg:w-[420px] flex-shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-hidden select-none">
-            {/* Drawer Header */}
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-white">
-              <div className="flex items-center gap-2">
-                <Bot className="w-4 h-4 text-emerald-600" />
-                <h3 className="text-xs font-bold text-slate-900">Test your Agent</h3>
-              </div>
-              <button
-                onClick={() => setIsTestDrawerVisible(false)}
-                className="text-xs text-slate-500 hover:text-slate-900 cursor-pointer font-medium"
-              >
-                Hide &gt;
-              </button>
-            </div>
-
-            {/* Train / Live Tabs + New Chat */}
-            <div className="px-4 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-              <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200">
-                <button
-                  onClick={() => setTestTab('train')}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                    testTab === 'train'
-                      ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-200'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Train
-                </button>
-                <button
-                  onClick={() => setTestTab('live')}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                    testTab === 'live'
-                      ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-200'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Live
-                </button>
-              </div>
-
-              <button
-                onClick={() =>
-                  setMessages([
-                    {
-                      role: 'assistant',
-                      text: `Hello! 👋 I am your ${config.businessName} AI Agent. How can I assist you today?`,
-                    },
-                  ])
-                }
-                className="text-xs text-slate-500 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span>New chat</span>
-              </button>
-            </div>
-
-            {/* Simulator Chat Area (WhatsApp Doodle Wallpaper Aesthetic) */}
-            <div
-              className="flex-1 overflow-y-auto p-4 space-y-3 relative"
-              style={{
-                backgroundColor: '#efeae2',
-                backgroundImage:
-                  'radial-gradient(#dcd5cb 1px, transparent 1px), radial-gradient(#dcd5cb 1px, #efeae2 1px)',
-                backgroundSize: '20px 20px',
-                backgroundPosition: '0 0, 10px 10px',
-              }}
-            >
-              {/* Wallpaper overlay watermark */}
-              <div className="absolute inset-0 pointer-events-none opacity-5 flex items-center justify-center">
-                <MessageSquare className="w-48 h-48 text-slate-800" />
-              </div>
-
-              {messages.map((m, idx) => (
-                <div
-                  key={idx}
-                  className={`flex flex-col relative z-10 ${
-                    m.role === 'user' ? 'items-end' : 'items-start'
-                  }`}
-                >
-                  <div
-                    className={`max-w-[85%] rounded-lg p-3 text-xs shadow-xs leading-relaxed ${
-                      m.role === 'user'
-                        ? 'bg-[#d9fdd3] text-slate-900 rounded-tr-none'
-                        : 'bg-white text-slate-900 rounded-tl-none border border-slate-200/60'
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                      agent.status === 'Active'
+                        ? 'bg-emerald-50 text-emerald-600'
+                        : 'bg-gray-100 text-gray-500'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{m.text}</p>
-
-                    {/* Interactive Calendar Booking Card if demo was scheduled */}
-                    {m.booking && (
-                      <div className="mt-2.5 p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-slate-800 space-y-2">
-                        <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-[11px]">
-                          <Calendar className="w-3.5 h-3.5" />
-                          <span>Demo Scheduled & Synced!</span>
-                        </div>
-                        <div className="text-[11px] space-y-1">
-                          <p>
-                            <strong>Date:</strong> {m.booking.scheduled_date} at{' '}
-                            {m.booking.scheduled_time}
-                          </p>
-                          <p>
-                            <strong>Prospect:</strong> {m.booking.prospect_name} (
-                            {m.booking.prospect_phone})
-                          </p>
-                          <p>
-                            <strong>Status:</strong>{' '}
-                            <span className="capitalize text-emerald-700 font-bold">
-                              {m.booking.status}
-                            </span>
-                          </p>
-                        </div>
-                        <Link
-                          href="/dashboard"
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 hover:underline pt-1"
-                        >
-                          <span>View on Dashboard Calendar</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </Link>
-                      </div>
-                    )}
-                  </div>
-                  <span className="text-[10px] text-slate-500 mt-1 px-1">
-                    {m.role === 'user' ? 'You' : config.agentName}
+                    {agent.status}
                   </span>
+                  <button
+                    onClick={() => showToast(`Options for ${agent.name}`)}
+                    className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50"
+                  >
+                    <MoreVertical className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              ))}
-
-              {simulating && (
-                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-white/90 border border-slate-200 text-slate-600 text-xs w-fit">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
-                  <span>Agent is typing...</span>
-                </div>
-              )}
-
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Quick Test Action Chips */}
-            <div className="px-4 py-2 border-t border-slate-200 bg-white flex items-center gap-1.5 overflow-x-auto text-[11px]">
-              <button
-                onClick={() => handleSendMessage('Tell me about the AI & Machine Learning course')}
-                className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 whitespace-nowrap"
-              >
-                💡 Course Inquiry
-              </button>
-              <button
-                onClick={() => handleSendMessage('Can I book a live demo tomorrow at 2:00 PM?')}
-                className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 whitespace-nowrap font-medium"
-              >
-                📅 Book at 2:00 PM
-              </button>
-            </div>
-
-            {/* Chat Input & Counter */}
-            <div className="p-4 border-t border-slate-200 bg-white space-y-2">
-              <div className="text-[11px] text-slate-500 font-medium">
-                500 / 500 free test messages left
               </div>
 
+              {/* Name & Description */}
+              <h3 className="text-sm font-bold text-gray-900 mb-1">{agent.name}</h3>
+              <p className="text-xs text-gray-500 leading-relaxed mb-3 line-clamp-2">
+                {agent.description}
+              </p>
+
+              {/* Tags */}
+              <div className="flex items-center gap-1.5 mb-4">
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-600">
+                  {agent.category}
+                </span>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-gray-100 text-gray-600">
+                  {agent.languages}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              {/* Stats Row (3 Columns) */}
+              <div className="grid grid-cols-3 gap-1 py-3 border-t border-b border-gray-100 mb-4 text-center">
+                <div>
+                  <p className="text-xs font-bold text-gray-900">{agent.conversations}</p>
+                  <p className="text-[10px] text-gray-400">Conversations</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-gray-900">{agent.resolutionRate}</p>
+                  <p className="text-[10px] text-gray-400">Resolution Rate</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-gray-900">{agent.humanHandoffs}</p>
+                  <p className="text-[10px] text-gray-400">Human Handoffs</p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
               <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Ask your agent something"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                  className="flex-1 bg-[#f8fafc] border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:bg-white focus:border-[#0b3d36] focus:outline-none"
-                />
                 <button
-                  onClick={() => handleSendMessage()}
-                  disabled={!chatInput.trim() || simulating}
-                  className="px-3.5 py-2 rounded-lg bg-slate-200 text-slate-600 disabled:opacity-50 hover:bg-[#0b3d36] hover:text-white text-xs font-semibold transition-all cursor-pointer flex-shrink-0"
+                  onClick={() => handleOpenPlayground(agent)}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 transition-all"
                 >
-                  Send
+                  <Play className="w-3 h-3 text-gray-600 fill-current" />
+                  Test
+                </button>
+                <button
+                  onClick={() => handleEditClick(agent)}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 transition-all"
+                >
+                  <Edit2 className="w-3 h-3 text-gray-600" />
+                  Edit
+                </button>
+                <button
+                  onClick={() => showToast(`More settings for ${agent.name}`)}
+                  className="w-8 h-8 rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50"
+                >
+                  •••
                 </button>
               </div>
-
-              <p className="text-[10px] text-slate-400 leading-snug">
-                Test your latest saved changes before publishing them. These responses are not
-                visible to customers.
-              </p>
             </div>
-          </aside>
-        )}
+          </div>
+        ))}
+
+        {/* ── Card 8: Create New Agent Card ──────────────────────────────────── */}
+        <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-6 flex flex-col items-center justify-center text-center hover:border-blue-300 transition-all min-h-[280px]">
+          <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xl font-light mb-3 shadow-sm">
+            <Plus className="w-6 h-6" />
+          </div>
+          <h3 className="text-sm font-bold text-gray-900 mb-1">Create New Agent</h3>
+          <p className="text-xs text-gray-500 max-w-xs mb-4">
+            Build a custom AI agent for your specific business needs.
+          </p>
+          <button
+            onClick={() => {
+              setEditingAgent(null);
+              setFormName('');
+              setFormDesc('');
+              setShowCreateModal(true);
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#1b59f8] text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition-all shadow-sm shadow-blue-500/20"
+          >
+            <Plus className="w-4 h-4" />
+            Create AI Agent
+          </button>
+        </div>
       </div>
 
-      {/* Floating WhatsApp Chat Icon (Bottom-Right matching screenshot) */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <button
-          onClick={() => setIsTestDrawerVisible(!isTestDrawerVisible)}
-          className="w-12 h-12 rounded-full bg-[#25d366] hover:bg-[#20ba59] text-white flex items-center justify-center shadow-lg transition-transform hover:scale-105 cursor-pointer"
-          title="WhatsApp Agent Simulator"
-        >
-          <MessageSquare className="w-6 h-6 fill-white" />
-          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-500 border-2 border-white" />
-        </button>
+      {/* ── Bottom Banner ───────────────────────────────────────────────────── */}
+      <div className="bg-gradient-to-r from-purple-50/70 via-indigo-50/50 to-blue-50/60 border border-purple-100 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
+            <Sparkles className="w-5 h-5 text-purple-600" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-gray-900">
+              Need help configuring your AI agents?
+            </h4>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Use our guided setup or test in the playground to find the perfect configuration.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => handleOpenPlayground(agents[0])}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-all shadow-sm"
+          >
+            <Play className="w-3.5 h-3.5 text-gray-600" />
+            Open AI Playground
+          </button>
+          <button
+            onClick={() => showToast('Opening documentation')}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-all shadow-sm"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-gray-600" />
+            View Documentation
+          </button>
+        </div>
       </div>
 
-      {/* ─── ADD SOURCE MODAL ──────────────────────────────────────────────── */}
-      {addSourceModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-bold text-slate-900">
-                {sourceType === 'url'
-                  ? 'Crawl a Website Page'
-                  : sourceType === 'file'
-                  ? 'Upload Document'
-                  : 'Paste Text Knowledge'}
-              </h3>
+      {/* ── Playground Drawer / Modal ───────────────────────────────────────── */}
+      {playgroundAgent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-gray-100 overflow-hidden flex flex-col h-[600px] animate-in fade-in zoom-in-95">
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-lg ${playgroundAgent.iconBg} flex items-center justify-center`}>
+                  {getAgentIcon(playgroundAgent.iconType)}
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">{playgroundAgent.name} Playground</h3>
+                  <p className="text-[11px] text-gray-400">Live test simulation</p>
+                </div>
+              </div>
               <button
-                onClick={() => setAddSourceModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700"
+                onClick={() => setPlaygroundAgent(null)}
+                className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-700">
-                {sourceType === 'url'
-                  ? 'Page URL'
-                  : sourceType === 'file'
-                  ? 'File Name or Title'
-                  : 'Knowledge Text'}
-              </label>
-              {sourceType === 'text' ? (
-                <textarea
-                  rows={4}
-                  value={sourceInput}
-                  onChange={(e) => setSourceInput(e.target.value)}
-                  placeholder="Paste FAQ questions, refund policy, admissions guidelines..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-900 focus:bg-white focus:border-[#0b3d36] focus:outline-none"
-                />
-              ) : (
-                <input
-                  type="text"
-                  value={sourceInput}
-                  onChange={(e) => setSourceInput(e.target.value)}
-                  placeholder={
-                    sourceType === 'url'
-                      ? 'https://academyhunt.com/courses'
-                      : 'Course_Brochure_2026.pdf'
-                  }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:bg-white focus:border-[#0b3d36] focus:outline-none"
-                />
+            {/* Chat message list */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#f8fafc]">
+              {chatMessages.map((msg, idx) => (
+                <div
+                  key={idx}
+                  className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-xs ${
+                      msg.sender === 'user'
+                        ? 'bg-[#1b59f8] text-white rounded-tr-sm'
+                        : 'bg-white text-gray-800 border border-gray-100 shadow-sm rounded-tl-sm'
+                    }`}
+                  >
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-white border border-gray-100 rounded-2xl px-4 py-2 text-xs text-gray-400 flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+                    Agent is typing...
+                  </div>
+                </div>
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            {/* Input Form */}
+            <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-gray-100 flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Test a customer message..."
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                className="flex-1 px-3.5 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+              />
               <button
-                onClick={() => setAddSourceModalOpen(false)}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                type="submit"
+                disabled={chatLoading}
+                className="w-9 h-9 rounded-xl bg-[#1b59f8] text-white flex items-center justify-center hover:bg-blue-700 disabled:opacity-50 transition-all"
               >
-                Cancel
+                <Send className="w-4 h-4" />
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Create / Edit Agent Modal ────────────────────────────────────────── */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                  <Bot className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">
+                    {editingAgent ? 'Edit AI Agent' : 'Create New AI Agent'}
+                  </h3>
+                  <p className="text-[11px] text-gray-400">Configure your automated WhatsApp agent</p>
+                </div>
+              </div>
               <button
-                onClick={handleAddSource}
-                disabled={!sourceInput.trim()}
-                className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-[#0b3d36] text-white hover:bg-[#082e29] disabled:opacity-50"
+                onClick={() => setShowCreateModal(false)}
+                className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400"
               >
-                Add Source
+                <X className="w-4 h-4" />
               </button>
             </div>
+
+            <form onSubmit={handleSaveAgent} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Agent Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Sales Assistant"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-gray-50/50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Description</label>
+                <textarea
+                  rows={3}
+                  placeholder="What will this AI agent handle?"
+                  value={formDesc}
+                  onChange={(e) => setFormDesc(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-gray-50/50 resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Category</label>
+                  <select
+                    value={formCategory}
+                    onChange={(e) => setFormCategory(e.target.value)}
+                    className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-gray-50/50"
+                  >
+                    <option value="Sales">Sales</option>
+                    <option value="Support">Support</option>
+                    <option value="Lead Gen">Lead Gen</option>
+                    <option value="Admissions">Admissions</option>
+                    <option value="Education">Education</option>
+                    <option value="Finance">Finance</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Languages</label>
+                  <select
+                    value={formLanguages}
+                    onChange={(e) => setFormLanguages(e.target.value)}
+                    className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-gray-50/50"
+                  >
+                    <option value="English">English</option>
+                    <option value="English + Hindi">English + Hindi</option>
+                    <option value="All Languages">All Languages (Auto)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-[#1b59f8] text-white text-xs font-semibold hover:bg-blue-700"
+                >
+                  {editingAgent ? 'Update Agent' : 'Create Agent'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

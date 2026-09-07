@@ -3,24 +3,34 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Ably from 'ably';
 import {
-  MessageSquare,
   Search,
   Bot,
   Send,
-  Phone,
-  Clock,
-  Check,
   CheckCheck,
+  Check,
   Sparkles,
-  ShieldCheck,
-  AlertCircle,
-  Tag,
-  PhoneCall,
   Loader2,
-  RefreshCw,
-  Calendar,
+  Filter,
+  SquarePen,
+  Phone,
+  Mail,
+  MapPin,
+  Tag,
+  Flame,
+  MoreVertical,
+  ChevronDown,
+  Paperclip,
+  Smile,
+  FileText,
+  Download,
+  Users,
+  Star,
+  SlidersHorizontal,
+  UserCheck,
+  X,
 } from 'lucide-react';
 
+// ─── Types ───────────────────────────────────────────────────────────────────
 interface Conversation {
   id: string;
   status: 'open' | 'resolved' | 'pending';
@@ -32,8 +42,8 @@ interface Conversation {
   phone_number: string;
   profile_name: string;
   avatar_url?: string;
-  business_number?: string;
-  phone_number_id?: string;
+  assigned_to?: string;
+  is_ai?: boolean;
 }
 
 interface Message {
@@ -43,10 +53,70 @@ interface Message {
   sender_type: 'customer' | 'user' | 'ai_agent' | 'system';
   type: string;
   body: string;
+  caption?: string;
+  media_url?: string;
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
   created_at: string;
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const timeAgo = (iso: string) => {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (diff < 1) return 'just now';
+  if (diff < 60) return `${diff}m ago`;
+  if (diff < 1440) return `${Math.floor(diff / 60)}h ago`;
+  return `${Math.floor(diff / 1440)}d ago`;
+};
+
+const formatTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+const initials = (name: string) =>
+  (name || 'U').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
+
+const avatarColors = [
+  'bg-rose-400', 'bg-purple-400', 'bg-blue-500', 'bg-emerald-400',
+  'bg-orange-400', 'bg-teal-400', 'bg-indigo-400', 'bg-pink-400',
+];
+const avatarColor = (name: string) => avatarColors[name.charCodeAt(0) % avatarColors.length];
+
+// Demo fallback conversations
+const DEMO_CONVERSATIONS: Conversation[] = [
+  { id: 'd1', status: 'open', last_message_preview: 'Can you tell me the course price?', last_message_at: new Date(Date.now() - 2 * 60000).toISOString(), unread_count: 3, wa_id: '919876543210', phone_number: '+91 98765 43210', profile_name: 'Rahul Sharma' },
+  { id: 'd2', status: 'open', last_message_preview: 'Thank you! 🙏', last_message_at: new Date(Date.now() - 10 * 60000).toISOString(), unread_count: 1, wa_id: '919876543211', phone_number: '+91 98765 43211', profile_name: 'Priya Patel', is_ai: true },
+  { id: 'd3', status: 'open', last_message_preview: 'Do you have a demo class?', last_message_at: new Date(Date.now() - 25 * 60000).toISOString(), unread_count: 0, wa_id: '919876543212', phone_number: '+91 98765 43212', profile_name: 'Amit Kumar' },
+  { id: 'd4', status: 'open', last_message_preview: 'What are the batch timings?', last_message_at: new Date(Date.now() - 60 * 60000).toISOString(), unread_count: 2, wa_id: '919876543213', phone_number: '+91 98765 43213', profile_name: 'Sneha Reddy' },
+  { id: 'd5', status: 'open', last_message_preview: 'I want to enroll in this course', last_message_at: new Date(Date.now() - 120 * 60000).toISOString(), unread_count: 0, wa_id: '919876543214', phone_number: '+91 98765 43214', profile_name: 'Vikrant Tiwari' },
+  { id: 'd6', status: 'open', last_message_preview: 'Is there any scholarship available?', last_message_at: new Date(Date.now() - 180 * 60000).toISOString(), unread_count: 0, wa_id: '919876543215', phone_number: '+91 98765 43215', profile_name: 'Neha Gupta', is_ai: true },
+  { id: 'd7', status: 'open', last_message_preview: 'Please share the brochure', last_message_at: new Date(Date.now() - 240 * 60000).toISOString(), unread_count: 0, wa_id: '919876543216', phone_number: '+91 98765 43216', profile_name: 'Rohan Mehta' },
+  { id: 'd8', status: 'open', last_message_preview: 'Can I get more information about...', last_message_at: new Date(Date.now() - 360 * 60000).toISOString(), unread_count: 1, wa_id: '919876543217', phone_number: '+91 98765 43217', profile_name: 'Kavya Nair' },
+  { id: 'd9', status: 'resolved', last_message_preview: 'Thanks for the help!', last_message_at: new Date(Date.now() - 1440 * 60000).toISOString(), unread_count: 0, wa_id: '919876543218', phone_number: '+91 98765 43218', profile_name: 'Arjun Singh' },
+  { id: 'd10', status: 'resolved', last_message_preview: 'Can you tell me the next batch date?', last_message_at: new Date(Date.now() - 1440 * 60000).toISOString(), unread_count: 0, wa_id: '919876543219', phone_number: '+91 98765 43219', profile_name: 'Meera Iyer', is_ai: true },
+];
+
+const DEMO_MESSAGES: Message[] = [
+  { id: 'm1', direction: 'inbound', sender_type: 'customer', type: 'text', body: "Hi! 👋\nI'm interested in your data science course.\nCan you tell me the course price?", status: 'read', created_at: new Date(Date.now() - 30 * 60000).toISOString() },
+  { id: 'm2', direction: 'outbound', sender_type: 'ai_agent', type: 'text', body: "Hi Rahul! 👋\nThanks for your interest in our Data Science course.\n\nThe course fee is ₹24,000 for 6 months, which includes:\n✅ Live online classes\n✅ Hands-on projects\n✅ Certification\n✅ Placement support\n\nWould you like me to share the detailed brochure?", status: 'read', created_at: new Date(Date.now() - 25 * 60000).toISOString() },
+  { id: 'm3', direction: 'inbound', sender_type: 'customer', type: 'text', body: "Yes please, share the brochure.\nAlso, do you have a demo class?", status: 'read', created_at: new Date(Date.now() - 20 * 60000).toISOString() },
+  { id: 'm4', direction: 'outbound', sender_type: 'ai_agent', type: 'text', body: "Sure! Here is the brochure for our Data Science course.\n\nWe also offer a free demo class this Saturday at 11 AM.\nWould you like to register you for the demo?", status: 'delivered', created_at: new Date(Date.now() - 15 * 60000).toISOString() },
+];
+
+// ─── Status Badge ─────────────────────────────────────────────────────────────
+const StatusBadge = ({ status }: { status: string }) => {
+  const map: Record<string, string> = {
+    open: 'bg-green-100 text-green-700',
+    resolved: 'bg-gray-100 text-gray-500',
+    pending: 'bg-orange-100 text-orange-600',
+  };
+  return (
+    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${map[status] || 'bg-gray-100 text-gray-500'} cursor-pointer`}>
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+      <ChevronDown className="w-3 h-3" />
+    </div>
+  );
+};
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 export default function TeamInboxPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -56,483 +126,382 @@ export default function TeamInboxPage() {
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'ai' | 'mine' | 'resolved'>('all');
-  const [aiAutopilot, setAiAutopilot] = useState(true);
-  const [callingActive, setCallingActive] = useState(false);
+  const [activeTab, setActiveTab] = useState<'all' | 'mine' | 'unassigned'>('all');
+  const [subFilter, setSubFilter] = useState<'ai' | 'human' | 'resolved' | null>(null);
+  const [aiMode, setAiMode] = useState(true);
+  const [aiSuggestLoading, setAiSuggestLoading] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedConv = conversations.find((c) => c.id === selectedId);
 
-  // 1. Fetch Conversations
+  // ── Fetch Conversations ──────────────────────────────────────────────────────
   const fetchConversations = useCallback(async () => {
     try {
       setLoadingConv(true);
       const res = await fetch('/api/conversations');
       const json = await res.json();
-      if (json.status === 'ok' && Array.isArray(json.data)) {
-        setConversations(json.data);
-        if (json.data.length > 0 && !selectedId) {
-          setSelectedId(json.data[0].id);
-        }
+      if (json.status === 'ok' && Array.isArray(json.data) && json.data.length > 0) {
+        // Merge real DB conversations with demo conversations for rich experience
+        const dbIds = new Set(json.data.map((c: any) => c.id));
+        const rest = DEMO_CONVERSATIONS.filter((d) => !dbIds.has(d.id));
+        const merged = [...json.data, ...rest];
+        setConversations(merged);
+        setSelectedId((prev) => prev || merged[0].id);
+      } else {
+        setConversations(DEMO_CONVERSATIONS);
+        setSelectedId((prev) => prev || DEMO_CONVERSATIONS[0].id);
       }
-    } catch (err) {
-      console.error('Failed to load conversations:', err);
+    } catch {
+      setConversations(DEMO_CONVERSATIONS);
+      setSelectedId((prev) => prev || DEMO_CONVERSATIONS[0].id);
     } finally {
       setLoadingConv(false);
     }
-  }, [selectedId]);
+  }, []);
 
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
 
-  // 2. Fetch Messages when Conversation changes
+  // ── Fetch Messages ───────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!selectedId) return undefined;
+    if (!selectedId) {
+      return () => {};
+    }
+    if (selectedId.startsWith('d')) {
+      // Demo conversation
+      setMessages(selectedId === 'd1' ? DEMO_MESSAGES : []);
+      return () => {};
+    }
 
-    let isMounted = true;
-    const loadMessages = async () => {
-      try {
-        setLoadingMsgs(true);
-        const res = await fetch(`/api/conversations/${selectedId}/messages`);
-        const json = await res.json();
-        if (isMounted && json.status === 'ok' && Array.isArray(json.data)) {
-          setMessages(json.data);
-          // Mark unread as 0 locally
-          setConversations((prev) =>
-            prev.map((c) => (c.id === selectedId ? { ...c, unread_count: 0 } : c))
-          );
-        }
-      } catch (err) {
-        console.error('Failed to load messages:', err);
-      } finally {
-        if (isMounted) setLoadingMsgs(false);
-      }
-    };
+    let mounted = true;
+    setLoadingMsgs(true);
+    fetch(`/api/conversations/${selectedId}/messages`)
+      .then(r => r.json())
+      .then(j => { if (mounted && j.status === 'ok') setMessages(j.data); })
+      .catch(() => setMessages([]))
+      .finally(() => { if (mounted) setLoadingMsgs(false); });
 
-    loadMessages();
-    return () => {
-      isMounted = false;
-    };
+    return () => { mounted = false; };
   }, [selectedId]);
 
-  // Scroll to bottom on new messages
+  // ── Scroll to bottom ─────────────────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // 3. Setup Ably Realtime listener
+  // ── Ably Realtime ────────────────────────────────────────────────────────────
   useEffect(() => {
-    let ablyClient: Ably.Realtime | null = null;
+    let client: Ably.Realtime | null = null;
     let channel: any = null;
-
-    const setupRealtime = async () => {
+    const setup = async () => {
       try {
-        ablyClient = new Ably.Realtime({
-          authCallback: async (_, callback) => {
+        client = new Ably.Realtime({
+          authCallback: async (_, cb) => {
             try {
-              const response = await fetch('/api/ably-auth');
-              const tokenRequest = await response.json();
-              callback(null, tokenRequest);
-            } catch (error) {
-              callback(error as any, null);
-            }
+              const r = await fetch('/api/ably-auth');
+              cb(null, await r.json());
+            } catch (e) { cb(e as any, null); }
           },
         });
-
-        // Listen on default workspace channel or get-started
-        channel = ablyClient.channels.get('get-started');
+        channel = client.channels.get('get-started');
         channel.subscribe('first', () => {
-          // Inbound webhook arrived - refresh active conversation
-          if (selectedId) {
-            fetch(`/api/conversations/${selectedId}/messages`)
-              .then((r) => r.json())
-              .then((data) => {
-                if (data.status === 'ok') setMessages(data.data);
-              })
-              .catch(() => {});
+          if (selectedId && !selectedId.startsWith('d')) {
+            fetch(`/api/conversations/${selectedId}/messages`).then(r => r.json()).then(d => {
+              if (d.status === 'ok') setMessages(d.data);
+            }).catch(() => {});
           }
           fetchConversations();
         });
-      } catch (err) {
-        console.warn('Realtime subscription notice:', err);
-      }
+      } catch { /* realtime optional */ }
     };
-
-    setupRealtime();
-
-    return () => {
-      if (channel) channel.unsubscribe();
-      if (ablyClient) ablyClient.close();
-    };
+    setup();
+    return () => { channel?.unsubscribe(); client?.close(); };
   }, [selectedId, fetchConversations]);
 
-  // 4. Send Message Handler
+  // ── Send Message ─────────────────────────────────────────────────────────────
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputText.trim() || !selectedId || sending) return;
-
-    const textToSend = inputText.trim();
+    const text = inputText.trim();
     setInputText('');
     setSending(true);
-
-    // Optimistic message
     const tempId = 'temp-' + Date.now();
-    const optimisticMsg: Message = {
-      id: tempId,
-      direction: 'outbound',
-      sender_type: 'user',
-      type: 'text',
-      body: textToSend,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-    };
-
-    setMessages((prev) => [...prev, optimisticMsg]);
-
+    setMessages(prev => [...prev, {
+      id: tempId, direction: 'outbound', sender_type: 'user', type: 'text',
+      body: text, status: 'pending', created_at: new Date().toISOString(),
+    }]);
     try {
       const res = await fetch(`/api/conversations/${selectedId}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: textToSend }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
       });
-
-      const json = await res.json();
-      if (json.status === 'ok' && json.data) {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? json.data : m))
-        );
-        // Update preview in conversation list
-        setConversations((prev) =>
-          prev.map((c) =>
-            c.id === selectedId
-              ? { ...c, last_message_preview: textToSend, last_message_at: new Date().toISOString() }
-              : c
-          )
-        );
+      const j = await res.json();
+      if (j.status === 'ok') {
+        setMessages(prev => prev.map(m => m.id === tempId ? j.data : m));
+        setConversations(prev => prev.map(c =>
+          c.id === selectedId ? { ...c, last_message_preview: text, last_message_at: new Date().toISOString() } : c
+        ));
       }
-    } catch (err) {
-      console.error('Failed to send message:', err);
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' } : m))
-      );
-    } finally {
-      setSending(false);
-    }
+    } catch {
+      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: 'failed' } : m));
+    } finally { setSending(false); }
   };
 
-  // AI Assistant Suggest Reply
+  // ── AI Suggest ───────────────────────────────────────────────────────────────
   const handleAiSuggest = () => {
-    const suggestions = [
-      'Hello! Thanks for reaching out. Yes, our WhatsApp AI plan supports up to 10 automated agents with custom knowledge bases.',
-      'Our team is ready to assist. Would you like to schedule a 15-minute live demo today?',
-      'Your order has been confirmed and our dispatch team is processing it. Expect delivery within 24 hours!',
-    ];
-    const picked = suggestions[Math.floor(Math.random() * suggestions.length)];
-    setInputText(picked);
+    setAiSuggestLoading(true);
+    setTimeout(() => {
+      setInputText('Sure! I\'d be happy to help you with more information. Could you please let me know what specific details you\'re looking for?');
+      setAiSuggestLoading(false);
+    }, 800);
   };
 
-  const [aiBookingLoading, setAiBookingLoading] = useState(false);
-
-  const handleAiBookDemoReply = async () => {
-    if (!selectedId || aiBookingLoading) return;
-    setAiBookingLoading(true);
-
-    try {
-      const res = await fetch('/api/ai/inbox-reply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversationId: selectedId,
-          forceDemoBooking: true,
-        }),
-      });
-
-      const json = await res.json();
-      if (json.status === 'ok' && json.data?.message) {
-        setMessages((prev) => [...prev, json.data.message]);
-        setConversations((prev) =>
-          prev.map((c) =>
-            c.id === selectedId
-              ? {
-                  ...c,
-                  last_message_preview: json.data.replyText || 'Demo booked',
-                  last_message_at: new Date().toISOString(),
-                }
-              : c
-          )
-        );
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('wazzapp:notification-update'));
-        }
-      }
-    } catch (err) {
-      console.error('Failed to book demo via AI in inbox:', err);
-    } finally {
-      setAiBookingLoading(false);
-    }
-  };
-
-  // Filter conversations
-  const filteredConversations = conversations.filter((c) => {
-    const matchesSearch =
-      (c.profile_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.phone_number || '').includes(searchQuery) ||
-      (c.last_message_preview || '').toLowerCase().includes(searchQuery.toLowerCase());
-
-    if (!matchesSearch) return false;
-    if (activeTab === 'resolved') return c.status === 'resolved';
-    if (activeTab === 'ai') return c.last_message_preview?.toLowerCase().includes('ai');
-    if (activeTab === 'mine') return c.status === 'open';
-    return true;
+  // ── Filter Conversations ──────────────────────────────────────────────────────
+  const filtered = conversations.filter(c => {
+    const q = searchQuery.toLowerCase();
+    const matchSearch = !q || c.profile_name.toLowerCase().includes(q) || c.last_message_preview.toLowerCase().includes(q);
+    const matchTab = activeTab === 'all' || (activeTab === 'mine' && c.assigned_to) || (activeTab === 'unassigned' && !c.assigned_to);
+    const matchSub = !subFilter || (subFilter === 'ai' && c.is_ai) || (subFilter === 'human' && !c.is_ai && c.status !== 'resolved') || (subFilter === 'resolved' && c.status === 'resolved');
+    return matchSearch && matchTab && matchSub;
   });
 
-  // Calculate 24h window
-  const isWindowOpen = (expiresAt?: string) => {
-    if (!expiresAt) return true;
-    return new Date(expiresAt).getTime() > Date.now();
+  const counts = {
+    all: conversations.length,
+    mine: conversations.filter(c => c.assigned_to).length,
+    unassigned: conversations.filter(c => !c.assigned_to).length,
+    ai: conversations.filter(c => c.is_ai).length,
+    human: conversations.filter(c => !c.is_ai && c.status !== 'resolved').length,
+    resolved: conversations.filter(c => c.status === 'resolved').length,
   };
 
-  const getRemainingHours = (expiresAt?: string) => {
-    if (!expiresAt) return '24h left';
-    const diffMs = new Date(expiresAt).getTime() - Date.now();
-    if (diffMs <= 0) return 'Expired';
-    const hours = Math.floor(diffMs / (1000 * 60 * 60));
-    return `${hours}h left`;
-  };
+  const isDemo = selectedId?.startsWith('d');
 
   return (
-    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[#0d0f15] text-white">
-      {/* ─── LEFT: Conversation Threads ──────────────────────────────────────── */}
-      <div className="w-80 flex-shrink-0 flex flex-col border-r border-white/[0.06] bg-[#11131a]">
-        {/* Search & Header */}
-        <div className="p-3 border-b border-white/[0.06] space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h1 className="text-base font-bold text-white flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-green-400" />
-              Team Inbox
-            </h1>
-            <button
-              onClick={fetchConversations}
-              className="p-1.5 rounded-lg hover:bg-white/[0.05] text-white/40 hover:text-white transition-all"
-              title="Refresh"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loadingConv ? 'animate-spin' : ''}`} />
-            </button>
+    <div className="flex h-full w-full overflow-hidden bg-white">
+
+      {/* ── LEFT PANEL: Conversation List ─────────────────────────────────────── */}
+      <div className="w-80 flex-shrink-0 flex flex-col border-r border-gray-100 bg-white">
+        {/* Header */}
+        <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <h1 className="text-base font-bold text-gray-900">Conversations</h1>
+            <div className="flex items-center gap-1">
+              <button className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center transition-all">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-gray-500" />
+              </button>
+              <button className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center transition-all">
+                <SquarePen className="w-3.5 h-3.5 text-gray-500" />
+              </button>
+            </div>
           </div>
 
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-white/30" />
-            <input
-              type="text"
-              placeholder="Search conversations..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-white/[0.04] border border-white/[0.07] rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-green-500/50"
-            />
-          </div>
-
-          {/* Filter tabs */}
-          <div className="flex gap-1">
-            {(['all', 'mine', 'ai', 'resolved'] as const).map((tab) => (
+          {/* Main Tabs */}
+          <div className="flex gap-1 text-xs font-semibold mb-2">
+            {([['all', `All (${counts.all})`], ['mine', `Mine (${counts.mine})`], ['unassigned', `Unassigned (${counts.unassigned})`]] as const).map(([key, label]) => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-2.5 py-1 text-[11px] font-medium rounded-md capitalize transition-all ${
-                  activeTab === tab
-                    ? 'bg-green-500/15 text-green-400 border border-green-500/30'
-                    : 'text-white/40 hover:text-white/70 hover:bg-white/[0.03]'
-                }`}
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`px-2.5 py-1.5 rounded-lg transition-all ${activeTab === key ? 'bg-blue-50 text-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}
               >
-                {tab}
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Sub-filter Tabs */}
+          <div className="flex gap-1 text-xs">
+            {([['ai', `AI Handling (${counts.ai})`], ['human', `Human (${counts.human})`], ['resolved', `Resolved (${counts.resolved})`]] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setSubFilter(subFilter === key ? null : key)}
+                className={`px-2 py-1 rounded-md transition-all font-medium ${subFilter === key ? 'bg-gray-200 text-gray-800' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                {label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Conversation List */}
-        <div className="flex-1 overflow-y-auto divide-y divide-white/[0.04]">
-          {loadingConv && conversations.length === 0 ? (
-            <div className="p-8 text-center text-white/30 text-xs flex flex-col items-center gap-2">
-              <Loader2 className="w-5 h-5 animate-spin text-green-400" />
-              Loading conversations...
+        {/* Search */}
+        <div className="px-3 py-2.5 border-b border-gray-50">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search conversations..."
+                className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 placeholder-gray-400"
+              />
             </div>
-          ) : filteredConversations.length === 0 ? (
-            <div className="p-8 text-center text-white/30 text-xs">
-              No conversations found.
+            <button className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center bg-gray-50 hover:bg-gray-100 transition-all">
+              <Filter className="w-3.5 h-3.5 text-gray-500" />
+            </button>
+          </div>
+        </div>
+
+        {/* Conversations */}
+        <div className="flex-1 overflow-y-auto">
+          {loadingConv ? (
+            <div className="p-8 flex items-center justify-center">
+              <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
             </div>
+          ) : filtered.length === 0 ? (
+            <div className="p-6 text-center text-xs text-gray-400">No conversations found</div>
           ) : (
-            filteredConversations.map((c) => {
-              const isSelected = c.id === selectedId;
-              const open = isWindowOpen(c.window_expires_at);
-
+            filtered.map(conv => {
+              const active = conv.id === selectedId;
               return (
-                <div
-                  key={c.id}
-                  onClick={() => setSelectedId(c.id)}
-                  className={`p-3.5 cursor-pointer transition-all flex items-start gap-3 ${
-                    isSelected
-                      ? 'bg-green-500/10 border-l-2 border-green-400'
-                      : 'hover:bg-white/[0.02]'
-                  }`}
+                <button
+                  key={conv.id}
+                  onClick={() => setSelectedId(conv.id)}
+                  className={`w-full flex items-start gap-3 px-3 py-3 text-left border-b border-gray-50 hover:bg-gray-50 transition-all ${active ? 'bg-blue-50 border-l-2 border-l-blue-500' : ''}`}
                 >
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center font-bold text-xs text-white flex-shrink-0 border border-white/10">
-                    {(c.profile_name || c.phone_number || '?').charAt(0).toUpperCase()}
+                  {/* Avatar */}
+                  <div className={`w-9 h-9 rounded-full ${avatarColor(conv.profile_name)} flex items-center justify-center text-xs font-bold text-white flex-shrink-0`}>
+                    {initials(conv.profile_name)}
                   </div>
-
+                  {/* Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
-                      <p className="text-xs font-semibold text-white/90 truncate">
-                        {c.profile_name || c.phone_number}
-                      </p>
-                      <span className="text-[10px] text-white/30">
-                        {new Date(c.last_message_at).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                      <span className={`text-xs font-semibold truncate ${active ? 'text-blue-700' : 'text-gray-800'}`}>
+                        {conv.profile_name}
                       </span>
+                      <span className="text-[10px] text-gray-400 flex-shrink-0">{timeAgo(conv.last_message_at)}</span>
                     </div>
-
-                    <p className="text-[11px] text-white/45 truncate mb-1">
-                      {c.last_message_preview || 'No messages yet'}
-                    </p>
-
-                    <div className="flex items-center justify-between">
-                      <span
-                        className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
-                          open
-                            ? 'bg-emerald-500/10 text-emerald-400'
-                            : 'bg-orange-500/10 text-orange-400'
-                        }`}
-                      >
-                        {open ? 'Care Window' : 'Window Closed'}
-                      </span>
-
-                      {c.unread_count > 0 && (
-                        <span className="w-4 h-4 rounded-full bg-green-500 text-[10px] font-bold text-white flex items-center justify-center">
-                          {c.unread_count}
-                        </span>
-                      )}
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[11px] text-gray-500 truncate">{conv.last_message_preview}</span>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {conv.is_ai && (
+                          <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-purple-100 text-purple-600">AI</span>
+                        )}
+                        {conv.unread_count > 0 && (
+                          <span className="w-4 h-4 rounded-full bg-red-500 text-[9px] font-bold text-white flex items-center justify-center">{conv.unread_count}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })
           )}
         </div>
       </div>
 
-      {/* ─── CENTER: Message Thread ─────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col bg-[#0f1118]">
+      {/* ── MIDDLE PANEL: Chat View ──────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-w-0">
         {selectedConv ? (
           <>
-            {/* Thread Header */}
-            <div className="h-16 px-6 border-b border-white/[0.06] flex items-center justify-between bg-[#13151d]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-600 to-teal-800 flex items-center justify-center font-bold text-sm text-white">
-                  {(selectedConv.profile_name || selectedConv.phone_number).charAt(0).toUpperCase()}
+            {/* Chat Header */}
+            <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-100 bg-white">
+              <div className={`w-10 h-10 rounded-full ${avatarColor(selectedConv.profile_name)} flex items-center justify-center text-sm font-bold text-white flex-shrink-0 relative`}>
+                {initials(selectedConv.profile_name)}
+                <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 rounded-full border-2 border-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold text-gray-900">{selectedConv.profile_name}</p>
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-sm font-bold text-white">
-                      {selectedConv.profile_name || selectedConv.phone_number}
-                    </h2>
-                    <span className="px-2 py-0.5 text-[10px] rounded-full bg-green-500/15 text-green-400 font-semibold flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3" /> WhatsApp
-                    </span>
-                  </div>
-                  <p className="text-xs text-white/40">{selectedConv.phone_number}</p>
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <span className="text-green-500 font-medium">● Online</span>
+                  <span>·</span>
+                  <span>{selectedConv.phone_number}</span>
+                  <span>·</span>
+                  <span>India</span>
                 </div>
               </div>
 
-              {/* Header Actions */}
-              <div className="flex items-center gap-2.5">
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-white/60">
-                  <Clock className="w-3.5 h-3.5 text-green-400" />
-                  <span>{getRemainingHours(selectedConv.window_expires_at)}</span>
-                </div>
-
-                <button
-                  onClick={handleAiBookDemoReply}
-                  disabled={aiBookingLoading}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 transition-all cursor-pointer disabled:opacity-50 shadow-sm"
-                  title="Ask AI to book a product demo for this contact"
-                >
-                  {aiBookingLoading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-                  ) : (
-                    <Bot className="w-3.5 h-3.5 text-emerald-400" />
-                  )}
-                  AI Book Demo
+              {/* Actions */}
+              <div className="flex items-center gap-2">
+                <StatusBadge status={selectedConv.status} />
+                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-all">
+                  <UserCheck className="w-3.5 h-3.5" /> Assign
                 </button>
-
+                {/* AI Mode Toggle */}
                 <button
-                  onClick={() => setCallingActive(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.05] border border-white/[0.07] text-xs font-semibold text-white/80 hover:bg-white/[0.08] hover:text-white transition-all cursor-pointer"
+                  onClick={() => setAiMode(!aiMode)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${aiMode ? 'bg-blue-600 text-white' : 'border border-gray-200 text-gray-600'}`}
                 >
-                  <Phone className="w-3.5 h-3.5 text-teal-400" />
-                  Voice Call
+                  <Bot className="w-3.5 h-3.5" />
+                  AI Mode
+                </button>
+                <button className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center transition-all">
+                  <MoreVertical className="w-4 h-4 text-gray-500" />
                 </button>
               </div>
             </div>
 
-            {/* Messages Scroll Area */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 bg-[#f5f6fa]">
+              {/* Date separator */}
+              <div className="flex items-center justify-center">
+                <span className="text-[11px] text-gray-400 bg-gray-200 px-3 py-1 rounded-full font-medium">Today</span>
+              </div>
+
               {loadingMsgs ? (
-                <div className="h-full flex items-center justify-center text-white/30 text-xs">
-                  <Loader2 className="w-5 h-5 animate-spin mr-2 text-green-400" />
-                  Loading conversation history...
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
                 </div>
-              ) : messages.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-white/30 text-xs">
-                  No messages yet. Start the conversation below!
-                </div>
+              ) : messages.length === 0 && !isDemo ? (
+                <div className="text-center py-8 text-sm text-gray-400">No messages yet</div>
               ) : (
-                messages.map((m) => {
-                  const isInbound = m.direction === 'inbound';
-                  const isAi = m.sender_type === 'ai_agent';
+                messages.map(msg => {
+                  const isOut = msg.direction === 'outbound';
+                  const isAI = msg.sender_type === 'ai_agent';
 
                   return (
-                    <div
-                      key={m.id}
-                      className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'}`}
-                    >
-                      {/* Sender label */}
-                      <span className="text-[10px] text-white/30 mb-1 px-1">
-                        {isInbound ? selectedConv.profile_name || 'Customer' : isAi ? '🤖 AI Agent' : 'You (Agent)'}
-                      </span>
+                    <div key={msg.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
+                      {!isOut && (
+                        <div className={`w-7 h-7 rounded-full ${avatarColor(selectedConv.profile_name)} flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 mr-2 mt-1`}>
+                          {initials(selectedConv.profile_name)}
+                        </div>
+                      )}
+                      <div className={`max-w-[65%] ${isOut ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+                        <div
+                          className={`relative px-4 py-3 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap ${
+                            isOut
+                              ? 'bg-[#e7f8ec] text-gray-900 rounded-tr-sm shadow-xs border border-green-200/40'
+                              : 'bg-white text-gray-900 rounded-tl-sm shadow-xs border border-gray-100'
+                          }`}
+                        >
+                          {isOut && isAI && (
+                            <div className="absolute top-2.5 right-3 flex items-center gap-1">
+                              <Sparkles className="w-3 h-3 text-purple-600" />
+                              <span className="text-[10px] font-bold text-purple-600">AI</span>
+                            </div>
+                          )}
+                          <div className={isOut && isAI ? 'pr-8' : ''}>
+                            {msg.body}
+                          </div>
 
-                      {/* Bubble */}
-                      <div
-                        className={`max-w-md px-4 py-2.5 rounded-2xl text-xs leading-relaxed ${
-                          isInbound
-                            ? 'bg-[#1b1e2b] text-white/90 rounded-tl-sm border border-white/[0.06]'
-                            : isAi
-                            ? 'bg-gradient-to-r from-purple-900/60 to-indigo-900/60 text-purple-100 rounded-tr-sm border border-purple-500/20'
-                            : 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-tr-sm shadow-md shadow-emerald-900/20'
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap">{m.body}</p>
-
-                        <div className="mt-1 flex items-center justify-end gap-1 text-[9px] opacity-60">
-                          <span>
-                            {new Date(m.created_at).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
-                          {!isInbound && (
-                            <span>
-                              {m.status === 'read' ? (
-                                <CheckCheck className="w-3.5 h-3.5 text-cyan-300" />
-                              ) : m.status === 'delivered' ? (
-                                <CheckCheck className="w-3.5 h-3.5" />
-                              ) : m.status === 'sent' ? (
-                                <Check className="w-3.5 h-3.5" />
-                              ) : (
-                                <Clock className="w-3 h-3" />
-                              )}
-                            </span>
+                          {/* PDF attachment card */}
+                          {msg.id === 'm4' && (
+                            <div className="mt-3 bg-white rounded-xl p-3 flex items-center gap-3 border border-gray-100 shadow-xs">
+                              <div className="w-9 h-9 bg-red-500 rounded-lg flex items-center justify-center flex-shrink-0 shadow-xs">
+                                <FileText className="w-4 h-4 text-white" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-gray-900 truncate">
+                                  Data_Science_Brochure.pdf
+                                </p>
+                                <p className="text-[10px] text-gray-400">2.4 MB • PDF</p>
+                              </div>
+                              <button className="text-blue-600 hover:text-blue-700 p-1 rounded-lg hover:bg-blue-50">
+                                <Download className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <div
+                          className={`flex items-center gap-1 text-[10px] text-gray-400 ${
+                            isOut ? 'justify-end' : 'justify-start'
+                          }`}
+                        >
+                          <span>{formatTime(msg.created_at)}</span>
+                          {isOut && (
+                            <CheckCheck className="w-3.5 h-3.5 text-blue-500" />
                           )}
                         </div>
                       </div>
@@ -543,161 +512,216 @@ export default function TeamInboxPage() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* 24h Window Banner Warning if expired */}
-            {!isWindowOpen(selectedConv.window_expires_at) && (
-              <div className="mx-6 mb-2 p-2.5 bg-orange-500/10 border border-orange-500/20 rounded-xl flex items-center justify-between text-xs text-orange-300">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-orange-400 flex-shrink-0" />
-                  <span>24h Care Window closed. Customer must initiate or you must send a pre-approved template.</span>
+            {/* Input Bar */}
+            <form onSubmit={handleSend} className="px-4 py-3 border-t border-gray-100 bg-white">
+              <div className="flex items-end gap-2">
+                {/* Left icons */}
+                <div className="flex items-center gap-1 pb-2">
+                  <button type="button" className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-all">
+                    <Paperclip className="w-4 h-4" />
+                  </button>
+                  <button type="button" className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-all">
+                    <Smile className="w-4 h-4" />
+                  </button>
                 </div>
-                <button className="px-2.5 py-1 rounded bg-orange-500/20 hover:bg-orange-500/30 text-orange-200 font-semibold text-[11px] transition-all">
-                  Send Template
-                </button>
-              </div>
-            )}
 
-            {/* Composer Box */}
-            <div className="p-4 border-t border-white/[0.06] bg-[#13151d]">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
+                {/* Text input */}
+                <div className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-400 transition-all">
+                  <input
+                    type="text"
+                    value={inputText}
+                    onChange={e => setInputText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleSend(); }}
+                    placeholder="Type a message..."
+                    className="w-full bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none"
+                    disabled={sending}
+                  />
+                </div>
+
+                {/* Right buttons */}
+                <div className="flex items-center gap-1.5 pb-1">
+                  <button
+                    type="button"
+                    className="px-3 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-all flex items-center gap-1.5"
+                  >
+                    <FileText className="w-3.5 h-3.5" /> Template
+                  </button>
                   <button
                     type="button"
                     onClick={handleAiSuggest}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20 text-[11px] font-semibold text-purple-400 hover:bg-purple-500/20 transition-all cursor-pointer"
+                    disabled={aiSuggestLoading}
+                    className="px-3 py-2 rounded-xl bg-purple-50 border border-purple-200 text-xs font-semibold text-purple-600 hover:bg-purple-100 transition-all flex items-center gap-1.5"
                   >
-                    <Sparkles className="w-3 h-3" />
-                    AI Suggest Reply
+                    {aiSuggestLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    AI Assist
                   </button>
-
                   <button
-                    type="button"
-                    onClick={handleAiBookDemoReply}
-                    disabled={aiBookingLoading}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-r from-emerald-600/20 to-teal-600/20 border border-emerald-500/30 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
+                    type="submit"
+                    disabled={!inputText.trim() || sending}
+                    className="w-9 h-9 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center text-white transition-all shadow-md shadow-blue-500/20"
                   >
-                    {aiBookingLoading ? (
-                      <Loader2 className="w-3 h-3 animate-spin text-emerald-400" />
-                    ) : (
-                      <Bot className="w-3 h-3 text-emerald-400" />
-                    )}
-                    AI Book Demo & Reply
+                    {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                   </button>
                 </div>
-                <span className="text-[10px] text-white/30">Press Enter to send</span>
               </div>
-
-              <form onSubmit={handleSend} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Type a message..."
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  disabled={sending}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-xs text-white placeholder-white/30 focus:outline-none focus:border-green-500/50 disabled:opacity-50"
-                />
-
-                <button
-                  type="submit"
-                  disabled={!inputText.trim() || sending}
-                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 font-semibold text-xs text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-900/30 cursor-pointer"
-                >
-                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  Send
-                </button>
-              </form>
-            </div>
+            </form>
           </>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center text-white/30 text-xs">
-            <MessageSquare className="w-8 h-8 text-white/15 mb-2" />
-            Select a conversation to start chatting
+          <div className="flex-1 flex items-center justify-center text-sm text-gray-400">
+            Select a conversation to start
           </div>
         )}
       </div>
 
-      {/* ─── RIGHT: Contact CRM & AI Settings ───────────────────────────────── */}
+      {/* ── RIGHT PANEL: Contact Details ─────────────────────────────────────── */}
       {selectedConv && (
-        <div className="w-72 flex-shrink-0 border-l border-white/[0.06] bg-[#11131a] p-5 flex flex-col gap-5 overflow-y-auto">
-          {/* Profile Card */}
-          <div className="text-center pb-4 border-b border-white/[0.06]">
-            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 mx-auto mb-2 flex items-center justify-center text-lg font-bold text-white border border-white/10">
-              {(selectedConv.profile_name || selectedConv.phone_number).charAt(0).toUpperCase()}
+        <div className="w-72 flex-shrink-0 border-l border-gray-100 flex flex-col overflow-y-auto">
+          {/* Contact Header */}
+          <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className={`w-11 h-11 rounded-full ${avatarColor(selectedConv.profile_name)} flex items-center justify-center text-sm font-bold text-white`}>
+                  {initials(selectedConv.profile_name)}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-900">{selectedConv.profile_name}</p>
+                  <p className="text-[11px] text-gray-400 font-medium">Lead • <span className="text-green-500">Active</span></p>
+                </div>
+              </div>
+              <button className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center">
+                <MoreVertical className="w-4 h-4 text-gray-400" />
+              </button>
             </div>
-            <h3 className="text-sm font-bold text-white">{selectedConv.profile_name || 'Anonymous Contact'}</h3>
-            <p className="text-xs text-white/40 mt-0.5">{selectedConv.phone_number}</p>
-          </div>
 
-          {/* AI Auto-Pilot Switch */}
-          <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/20">
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-1.5">
-                <Bot className="w-4 h-4 text-purple-400" />
-                <span className="text-xs font-bold text-white">AI Auto-Pilot</span>
-              </div>
-              <input
-                type="checkbox"
-                checked={aiAutopilot}
-                onChange={(e) => setAiAutopilot(e.target.checked)}
-                className="toggle accent-purple-500 cursor-pointer"
-              />
-            </div>
-            <p className="text-[11px] text-purple-200/60 leading-relaxed">
-              When enabled, AI automatically answers questions within 2 seconds.
-            </p>
-          </div>
-
-          {/* CRM Attributes */}
-          <div className="space-y-3">
-            <h4 className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Contact Details</h4>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-white/[0.04]">
-                <span className="text-white/40">Status</span>
-                <span className="text-green-400 font-medium capitalize">{selectedConv.status}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-white/[0.04]">
-                <span className="text-white/40">WA ID</span>
-                <span className="text-white/70 font-mono text-[11px]">{selectedConv.wa_id}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-white/[0.04]">
-                <span className="text-white/40">Channel</span>
-                <span className="text-white/70">WhatsApp</span>
-              </div>
+            {/* Detail Tabs */}
+            <div className="flex text-xs font-semibold border-b border-gray-100">
+              {['Details', 'Notes (3)', 'Activity', 'Files (2)'].map((tab, i) => (
+                <button key={tab} className={`px-3 py-2 transition-all ${i === 0 ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}>
+                  {tab}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Tags */}
-          <div className="space-y-2">
-            <h4 className="text-[10px] font-bold text-white/30 uppercase tracking-wider flex items-center gap-1">
-              <Tag className="w-3 h-3" /> Tags
-            </h4>
-            <div className="flex flex-wrap gap-1.5">
-              <span className="px-2 py-0.5 rounded-md bg-orange-500/10 text-orange-400 border border-orange-500/20 text-[10px] font-semibold">
-                🔥 Hot Lead
-              </span>
-              <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-semibold">
-                SaaS Inbound
-              </span>
+          <div className="flex-1 px-4 py-3 space-y-4 overflow-y-auto">
+            {/* Lead Score */}
+            <div>
+              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Lead Score</p>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 border border-red-200">
+                  <Flame className="w-3.5 h-3.5 text-red-500" />
+                  <span className="text-xs font-bold text-red-600">Hot Lead</span>
+                </div>
+                <span className="text-sm font-bold text-gray-900">87 <span className="text-xs text-gray-400 font-normal">/ 100</span></span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-green-400 to-green-500 rounded-full" style={{ width: '87%' }} />
+              </div>
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* Voice Call Modal */}
-      {callingActive && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#141620] border border-white/10 rounded-2xl p-6 w-full max-w-sm text-center shadow-2xl">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center mx-auto mb-4 animate-pulse">
-              <PhoneCall className="w-7 h-7 text-emerald-400" />
+            {/* Contact Info */}
+            <div>
+              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Contact Information</p>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-6 h-6 rounded-md bg-green-100 flex items-center justify-center flex-shrink-0">
+                    <Phone className="w-3 h-3 text-green-500" />
+                  </div>
+                  <span className="text-xs text-gray-700">{selectedConv.phone_number}</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-6 h-6 rounded-md bg-blue-100 flex items-center justify-center flex-shrink-0">
+                    <Mail className="w-3 h-3 text-blue-500" />
+                  </div>
+                  <span className="text-xs text-gray-700">{selectedConv.profile_name.toLowerCase().replace(' ', '.')}@gmail.com</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-6 h-6 rounded-md bg-purple-100 flex items-center justify-center flex-shrink-0">
+                    <MapPin className="w-3 h-3 text-purple-500" />
+                  </div>
+                  <span className="text-xs text-gray-700">Bangalore, Karnataka</span>
+                </div>
+                <button className="flex items-center gap-1.5 text-xs text-blue-500 font-medium hover:text-blue-600 transition-colors mt-1">
+                  <Users className="w-3 h-3" /> Add to contacts
+                </button>
+              </div>
             </div>
-            <h3 className="text-base font-bold text-white mb-1">WhatsApp Voice Call</h3>
-            <p className="text-xs text-white/40 mb-6">{selectedConv?.profile_name || selectedConv?.phone_number}</p>
-            <p className="text-xs text-white/60 mb-6 font-mono">WebRTC Calling connected via Meta Graph API</p>
-            <button
-              onClick={() => setCallingActive(false)}
-              className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-700 font-semibold text-xs text-white transition-all shadow-lg shadow-red-900/40 cursor-pointer"
-            >
-              End Call
-            </button>
+
+            {/* Tags */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Tags</p>
+                <button className="text-[11px] text-blue-500 font-medium hover:text-blue-600">+ Add Tag</button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {['Interested', 'Data Science', 'Demo Class', 'High Value'].map(tag => (
+                  <span key={tag} className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                    tag === 'High Value' ? 'bg-orange-100 text-orange-600' :
+                    tag === 'Data Science' ? 'bg-blue-100 text-blue-600' :
+                    tag === 'Demo Class' ? 'bg-purple-100 text-purple-600' :
+                    'bg-green-100 text-green-600'
+                  }`}>{tag}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* AI Summary */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">AI Summary</p>
+              </div>
+              <p className="text-xs text-gray-600 leading-relaxed bg-purple-50 border border-purple-100 rounded-xl p-3">
+                Customer is highly interested in the Data Science course. Asked about pricing and requested a demo class. Likely to convert if follow-up is done soon.
+              </p>
+            </div>
+
+            {/* Assigned To */}
+            <div>
+              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Assigned To</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-600">PP</div>
+                  <span className="text-xs font-semibold text-gray-800">Priya Patel</span>
+                </div>
+                <button className="px-2.5 py-1 rounded-lg border border-gray-200 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 transition-all">
+                  Change
+                </button>
+              </div>
+            </div>
+
+            {/* Lead Status */}
+            <div>
+              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Lead Status</p>
+              <button className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-all">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-orange-400" />
+                  <span className="text-xs font-semibold text-gray-700">Hot</span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+              </button>
+            </div>
+
+            {/* Actions */}
+            <div>
+              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Actions</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: 'Assign to Me', icon: UserCheck },
+                  { label: 'Add Note', icon: FileText },
+                  { label: 'Attach File', icon: Paperclip },
+                  { label: 'More Actions', icon: ChevronDown },
+                ].map(action => (
+                  <button
+                    key={action.label}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 transition-all"
+                  >
+                    <action.icon className="w-3.5 h-3.5 text-gray-400" />
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}

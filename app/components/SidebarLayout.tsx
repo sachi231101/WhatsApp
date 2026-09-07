@@ -121,18 +121,30 @@ export default function SidebarLayout({ children, userId, appName }: SidebarLayo
             <path d="M137 55L96 119H128L110 165L160 101H128L137 55Z" fill="white" />
           </svg>
           <span className="font-semibold text-slate-700 tracking-tight">{appName}</span>
+          <span className="ml-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md uppercase tracking-wider">
+            Admin Console
+          </span>
         </div>
-        <div className="flex items-center gap-5">
-          <a href="/privacy" className="text-sm text-slate-500 hover:text-slate-700 transition-colors">
+        <div className="flex items-center gap-4">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors"
+          >
+            <span>View Client Portal</span>
+            <span aria-hidden="true">&rarr;</span>
+          </Link>
+          <a href="/privacy" className="text-sm text-slate-500 hover:text-slate-700 transition-colors hidden sm:inline">
             Privacy Policy
           </a>
-          <span className="text-sm font-medium text-slate-600">{userId}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-indigo-500" />
+            <span className="text-sm font-medium text-slate-600 truncate max-w-[150px]">{userId}</span>
+          </div>
 
           <a
             href="/auth/logout"
-            className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 transition-colors"
+            className="flex items-center gap-1.5 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-lg transition-colors"
           >
-            Logout
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
@@ -141,6 +153,7 @@ export default function SidebarLayout({ children, userId, appName }: SidebarLayo
                 d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
               />
             </svg>
+            <span>Logout</span>
           </a>
         </div>
       </header>

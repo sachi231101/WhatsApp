@@ -30,9 +30,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Sample Tech Provider',
-  description:
-    'A sample tech provider that allows for easy instantiation by developers, and easy testing of Meta Business products, onboarding. and APIs',
+  title: 'Wazzi App — WhatsApp AI SaaS',
+  description: 'Your WhatsApp business, powered by AI.',
 };
 
 export default function RootLayout({
@@ -55,22 +54,11 @@ export default function RootLayout({
   }
 
   return (
-    <html lang="en">
+    <html lang="en" className="h-full">
       <Script src="https://connect.facebook.net/en_US/sdk.js" strategy="afterInteractive" />
 
-      <body className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
+      <body className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} font-sans antialiased h-full overflow-hidden`}>
         <ErrorBoundary>{children}</ErrorBoundary>
-        <footer className="text-center px-4 py-3 text-xs text-gray-500 border-t border-gray-200 mt-6">
-          <span>Copyright &copy; {new Date().getFullYear()} Meta Platforms, Inc. All rights reserved.</span>
-          {' · '}
-          <a href="https://opensource.fb.com/legal/terms" target="_blank" rel="noopener noreferrer" className="text-gray-500 underline">
-            Terms of Use
-          </a>
-          {' · '}
-          <a href="https://opensource.fb.com/legal/privacy" target="_blank" rel="noopener noreferrer" className="text-gray-500 underline">
-            Privacy Policy
-          </a>
-        </footer>
         <SpeedInsights />
         <Analytics />
       </body>

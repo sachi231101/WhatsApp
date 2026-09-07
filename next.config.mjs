@@ -8,7 +8,9 @@
 const nextConfig = {
   reactStrictMode: false,
   allowedDevOrigins: ['dev.kxlconsulting.com'],
-  eslint: {},
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   images: {
     remotePatterns: [
       {

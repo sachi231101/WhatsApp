@@ -1,6 +1,7 @@
 import { sql } from '@vercel/postgres';
 import { WORKSPACE_ROLES, type WorkspaceRole, normalizeWorkspaceRole } from './roles';
 import { getPermissionsForRole } from './permissions';
+import { hashPassword } from './password';
 
 export interface WorkspaceContext {
   userId: string;
@@ -11,6 +12,7 @@ export interface WorkspaceContext {
   workspaceId: string;
   workspaceName: string;
   role: WorkspaceRole;
+  userRole?: string; // 'admin' | 'client'
   permissions: string[];
   isSuperAdmin: boolean;
 }
@@ -38,10 +40,16 @@ export async function ensureCoreTables(): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      auth0_sub VARCHAR(255) UNIQUE NOT NULL,
+      auth0_sub VARCHAR(255) UNIQUE,
       email VARCHAR(255) UNIQUE NOT NULL,
       name VARCHAR(255),
       avatar_url TEXT,
+      password_hash TEXT,
+      role VARCHAR(50) DEFAULT 'client',
+      company_name VARCHAR(255),
+      phone_number VARCHAR(50),
+      is_super_admin BOOLEAN DEFAULT FALSE,
+      status VARCHAR(50) DEFAULT 'active',
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
@@ -61,6 +69,7 @@ export async function ensureCoreTables(): Promise<void> {
       workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       role VARCHAR(50) NOT NULL DEFAULT 'member',
+      invitation_status VARCHAR(50) NOT NULL DEFAULT 'active',
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(workspace_id, user_id)
@@ -443,6 +452,49 @@ export async function ensureCoreTables(): Promise<void> {
       console.warn('ensureCoreTables statement notice:', err);
     }
   }
+
+  const migrations = [
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'client';`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255);`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number VARCHAR(50);`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN DEFAULT FALSE;`,
+    `ALTER TABLE users ALTER COLUMN auth0_sub DROP NOT NULL;`,
+    `ALTER TABLE workspace_memberships ADD COLUMN IF NOT EXISTS invitation_status VARCHAR(50) NOT NULL DEFAULT 'active';`,
+  ];
+  for (const m of migrations) {
+    try {
+      await (sql as any).query(m);
+    } catch {
+      // Ignored if column already exists
+    }
+  }
+
+  // Seed default Demo Admin and Client accounts if not exists
+  try {
+    const adminPass = hashPassword('Admin@123456');
+    const clientPass = hashPassword('Client@123456');
+
+    await (sql as any).query(`
+      INSERT INTO users (auth0_sub, email, name, role, is_super_admin, password_hash)
+      VALUES ('local|admin', 'admin@wazzapp.com', 'System Admin', 'admin', TRUE, '${adminPass}')
+      ON CONFLICT (email) DO UPDATE SET 
+        role = 'admin',
+        is_super_admin = TRUE,
+        password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash);
+    `);
+
+    await (sql as any).query(`
+      INSERT INTO users (auth0_sub, email, name, role, is_super_admin, password_hash, company_name)
+      VALUES ('local|client', 'client@company.com', 'Alex Morgan', 'client', FALSE, '${clientPass}', 'Acme Global Corp')
+      ON CONFLICT (email) DO UPDATE SET 
+        role = 'client',
+        company_name = COALESCE(users.company_name, EXCLUDED.company_name),
+        password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash);
+    `);
+  } catch (seedErr) {
+    console.warn('Seed notice:', seedErr);
+  }
 }
 
 let tablesEnsured = false;
@@ -471,7 +523,7 @@ export async function resolveWorkspaceContext(
       INSERT INTO users (auth0_sub, email, name)
       VALUES (${'auth0|' + userEmail}, ${userEmail}, ${userName || userEmail.split('@')[0]})
       ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
-      RETURNING id, email, name, is_super_admin
+      RETURNING id, email, name, is_super_admin, role
     `;
     const user = userRows[0];
     const isSuperAdmin = Boolean(user.is_super_admin);
@@ -553,6 +605,7 @@ export async function resolveWorkspaceContext(
         workspaceId: selectedWorkspace.workspace_id,
         workspaceName: selectedWorkspace.workspace_name,
         role: normalizedRole,
+        userRole: user.role || (isSuperAdmin ? 'admin' : 'client'),
         permissions: getPermissionsForRole(normalizedRole),
         isSuperAdmin,
       };
@@ -590,6 +643,7 @@ export async function resolveWorkspaceContext(
       workspaceId: workspace.id,
       workspaceName: workspace.name,
       role: WORKSPACE_ROLES.OWNER,
+      userRole: user.role || (isSuperAdmin ? 'admin' : 'client'),
       permissions: getPermissionsForRole(WORKSPACE_ROLES.OWNER),
       isSuperAdmin,
     };
@@ -604,6 +658,7 @@ export async function resolveWorkspaceContext(
       workspaceId: DEV_WORKSPACE_ID,
       workspaceName: 'Default Workspace',
       role: WORKSPACE_ROLES.OWNER,
+      userRole: 'admin',
       permissions: getPermissionsForRole(WORKSPACE_ROLES.OWNER),
       isSuperAdmin: true,
     };
