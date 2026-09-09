@@ -37,7 +37,7 @@ const navSections = [
       {
         label: 'Configuration',
         description: 'Configure onboarding settings',
-        href: '/',
+        href: '/admin',
         Icon: Settings,
       },
       {

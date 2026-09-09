@@ -10,6 +10,7 @@ import {
   Settings,
   User,
   Command,
+  Menu,
 } from 'lucide-react';
 
 export default function ClientTopbar() {
@@ -48,15 +49,23 @@ export default function ClientTopbar() {
   const getSearchPlaceholder = () => {
     if (pathname.includes('/contacts')) return 'Search contacts, tags, or filters...';
     if (pathname.includes('/inbox')) return 'Search conversations, contacts...';
-    if (pathname.includes('/ai-agents')) return 'Search agents, models, or keywords...';
-    return 'Search anything...';
+    return 'Search messages, contacts, or campaigns...';
   };
 
-  const displayName = currentUser?.name || 'Sachin Kumar';
-  const displayRole = currentUser?.role === 'admin' ? 'Admin' : (currentUser ? 'Business' : 'Admin');
+  const displayName = 'Sachin Kumar';
+  const displayRole = 'Admin';
 
   return (
-    <header className="h-14 flex-shrink-0 bg-white border-b border-gray-100 flex items-center px-6 gap-4">
+    <header className="h-14 flex-shrink-0 bg-white border-b border-gray-100 flex items-center px-4 sm:px-6 gap-3 sm:gap-4">
+      {/* Mobile Menu Trigger */}
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new CustomEvent('toggle-mobile-sidebar'))}
+        className="md:hidden p-1.5 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+        aria-label="Open Navigation Menu"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
       {/* Search */}
       <div className="flex-1 max-w-xl">
         <div className="relative">
@@ -78,9 +87,9 @@ export default function ClientTopbar() {
         <div ref={notifRef} className="relative">
           <button
             onClick={() => setNotifOpen(!notifOpen)}
-            className="relative w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-all"
+            className="relative w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-all border border-gray-200 cursor-pointer"
           >
-            <Bell className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} />
+            <Bell className="w-4.5 h-4.5 text-gray-700" style={{ width: 18, height: 18 }} />
             {unreadCount > 0 && (
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
             )}

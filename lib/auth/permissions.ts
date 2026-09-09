@@ -116,7 +116,43 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRole, readonly PermissionCode[]> 
     PERMISSIONS.TEMPLATES_VIEW,
     PERMISSIONS.SETTINGS_VIEW,
   ],
+  [WORKSPACE_ROLES.MANAGER]: [
+    PERMISSIONS.WORKSPACE_VIEW,
+    PERMISSIONS.MEMBERS_VIEW,
+    PERMISSIONS.MEMBERS_INVITE,
+    PERMISSIONS.WHATSAPP_VIEW,
+    PERMISSIONS.CONVERSATIONS_VIEW,
+    PERMISSIONS.CONVERSATIONS_MANAGE,
+    PERMISSIONS.CONVERSATIONS_ASSIGN,
+    PERMISSIONS.MESSAGES_READ,
+    PERMISSIONS.MESSAGES_SEND,
+    PERMISSIONS.CONTACTS_VIEW,
+    PERMISSIONS.CONTACTS_MANAGE,
+    PERMISSIONS.CONTACTS_EXPORT,
+    PERMISSIONS.TEMPLATES_VIEW,
+    PERMISSIONS.TEMPLATES_MANAGE,
+    PERMISSIONS.SETTINGS_VIEW,
+  ],
+  [WORKSPACE_ROLES.VIEWER]: [
+    PERMISSIONS.WORKSPACE_VIEW,
+    PERMISSIONS.MEMBERS_VIEW,
+    PERMISSIONS.WHATSAPP_VIEW,
+    PERMISSIONS.CONVERSATIONS_VIEW,
+    PERMISSIONS.MESSAGES_READ,
+    PERMISSIONS.CONTACTS_VIEW,
+    PERMISSIONS.TEMPLATES_VIEW,
+    PERMISSIONS.SETTINGS_VIEW,
+  ],
 };
+
+// Aliases for uppercase access
+(ROLE_PERMISSIONS as any).OWNER = ROLE_PERMISSIONS[WORKSPACE_ROLES.OWNER];
+(ROLE_PERMISSIONS as any).ADMIN = ROLE_PERMISSIONS[WORKSPACE_ROLES.ADMIN];
+(ROLE_PERMISSIONS as any).MANAGER = ROLE_PERMISSIONS[WORKSPACE_ROLES.MANAGER];
+(ROLE_PERMISSIONS as any).MEMBER = ROLE_PERMISSIONS[WORKSPACE_ROLES.MEMBER];
+(ROLE_PERMISSIONS as any).AGENT = ROLE_PERMISSIONS[WORKSPACE_ROLES.AGENT];
+(ROLE_PERMISSIONS as any).VIEWER = ROLE_PERMISSIONS[WORKSPACE_ROLES.VIEWER];
+
 
 /**
  * Checks if a specific workspace role is granted a given permission.
@@ -126,8 +162,8 @@ export function hasPermission(
   permission: PermissionCode,
 ): boolean {
   if (!role) return false;
-  const roleKey = role as WorkspaceRole;
-  const granted = ROLE_PERMISSIONS[roleKey];
+  const normalized = (role as string).toUpperCase() as WorkspaceRole;
+  const granted = ROLE_PERMISSIONS[normalized] || ROLE_PERMISSIONS[(role as string).toLowerCase() as WorkspaceRole];
   if (!granted) return false;
   return granted.includes(permission);
 }
@@ -139,6 +175,6 @@ export function getPermissionsForRole(
   role: WorkspaceRole | string | undefined | null,
 ): PermissionCode[] {
   if (!role) return [];
-  const roleKey = role as WorkspaceRole;
-  return [...(ROLE_PERMISSIONS[roleKey] || [])];
+  const normalized = (role as string).toUpperCase() as WorkspaceRole;
+  return [...(ROLE_PERMISSIONS[normalized] || ROLE_PERMISSIONS[(role as string).toLowerCase() as WorkspaceRole] || [])];
 }

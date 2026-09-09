@@ -100,24 +100,54 @@ export default function LiveWebhooks({ appId }: { appId: string }) {
 
   useEffect(() => {
     setIsMounted(true);
-    const ablyClient = new Ably.Realtime({
-      authCallback: async (_, callback) => {
-        try {
-          const response = await fetch('/api/ably-auth');
-          const tokenRequest = await response.json();
-          callback(null, tokenRequest);
-        } catch (error) {
-          callback(error, null);
-        }
-      },
-    });
-    ablyClient.connection.on('connected', () => setConnected(true));
-    ablyClient.connection.on('disconnected', () => setConnected(false));
-    const channel = ablyClient.channels.get('get-started');
-    channel.subscribe('first', (message) => addWebhook(message.data));
+    let ablyClient: Ably.Realtime | null = null;
+    let channel: any = null;
+    let cancelled = false;
+
+    const setup = async () => {
+      try {
+        const response = await fetch('/api/ably-auth');
+        if (!response.ok || cancelled) return;
+        const data = await response.json();
+        if (!data || data.enabled === false || data.error || cancelled) return;
+
+        ablyClient = new Ably.Realtime({
+          authCallback: async (_, callback) => {
+            try {
+              const res = await fetch('/api/ably-auth');
+              if (!res.ok) {
+                callback({ message: `Ably auth unavailable (${res.status})`, statusCode: 403, code: 40101 } as any, null);
+                return;
+              }
+              const tokenRequest = await res.json();
+              if (tokenRequest.error || tokenRequest.enabled === false) {
+                callback({ message: tokenRequest.error || 'Ably disabled', statusCode: 403, code: 40101 } as any, null);
+                return;
+              }
+              callback(null, tokenRequest);
+            } catch (error) {
+              callback({ message: (error as Error)?.message || 'Ably auth error', statusCode: 403, code: 40101 } as any, null);
+            }
+          },
+        });
+
+        ablyClient.connection.on('connected', () => setConnected(true));
+        ablyClient.connection.on('disconnected', () => setConnected(false));
+        ablyClient.connection.on('failed', () => setConnected(false));
+
+        channel = ablyClient.channels.get('get-started');
+        channel.subscribe('first', (message: any) => addWebhook(message.data));
+      } catch {}
+    };
+
+    setup();
+
     return function cleanup() {
-      channel.unsubscribe();
-      ablyClient.close();
+      cancelled = true;
+      try {
+        channel?.unsubscribe();
+        ablyClient?.close();
+      } catch {}
     };
   }, []);
 

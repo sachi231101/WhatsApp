@@ -12,44 +12,59 @@ export type PlatformRole = (typeof PLATFORM_ROLES)[keyof typeof PLATFORM_ROLES];
 export const WORKSPACE_ROLES = {
   OWNER: 'owner',
   ADMIN: 'admin',
+  MANAGER: 'manager',
   MEMBER: 'member',
   AGENT: 'agent',
+  VIEWER: 'viewer',
 } as const;
 
 export type WorkspaceRole = (typeof WORKSPACE_ROLES)[keyof typeof WORKSPACE_ROLES];
 
 /**
  * Numeric weight for role hierarchy comparisons.
- * owner (40) > admin (30) > member (20) > agent (10)
+ * owner (50) > admin (40) > manager (30) > member (20) > agent (15) > viewer (10)
  */
-export const WORKSPACE_ROLE_LEVELS: Record<WorkspaceRole, number> = {
-  [WORKSPACE_ROLES.OWNER]: 40,
-  [WORKSPACE_ROLES.ADMIN]: 30,
-  [WORKSPACE_ROLES.MEMBER]: 20,
-  [WORKSPACE_ROLES.AGENT]: 10,
+export const WORKSPACE_ROLE_LEVELS: Record<string, number> = {
+  owner: 50,
+  OWNER: 50,
+  admin: 40,
+  ADMIN: 40,
+  manager: 30,
+  MANAGER: 30,
+  member: 20,
+  MEMBER: 20,
+  agent: 15,
+  AGENT: 15,
+  viewer: 10,
+  VIEWER: 10,
 };
+
+/**
+ * Normalizes an arbitrary role string into a valid WorkspaceRole.
+ */
+export function normalizeWorkspaceRole(role: string | undefined | null): WorkspaceRole {
+  if (!role) return WORKSPACE_ROLES.MEMBER;
+  const lower = role.toLowerCase().trim();
+  if (lower === 'owner') return WORKSPACE_ROLES.OWNER;
+  if (lower === 'admin') return WORKSPACE_ROLES.ADMIN;
+  if (lower === 'manager') return WORKSPACE_ROLES.MANAGER;
+  if (lower === 'agent') return WORKSPACE_ROLES.AGENT;
+  if (lower === 'viewer') return WORKSPACE_ROLES.VIEWER;
+  if (lower === 'member') return WORKSPACE_ROLES.MEMBER;
+  return WORKSPACE_ROLES.MEMBER;
+}
 
 /**
  * Checks if the given role satisfies or exceeds the minimum required role level.
  */
 export function hasRoleAtLeast(
   currentRole: WorkspaceRole | string | undefined | null,
-  requiredRole: WorkspaceRole,
+  requiredRole: WorkspaceRole | string,
 ): boolean {
   if (!currentRole) return false;
-  const currentLevel = WORKSPACE_ROLE_LEVELS[currentRole as WorkspaceRole] ?? 0;
-  const requiredLevel = WORKSPACE_ROLE_LEVELS[requiredRole] ?? 0;
+  const currentKey = String(currentRole).trim().toLowerCase();
+  const requiredKey = String(requiredRole).trim().toLowerCase();
+  const currentLevel = WORKSPACE_ROLE_LEVELS[currentKey] ?? 0;
+  const requiredLevel = WORKSPACE_ROLE_LEVELS[requiredKey] ?? 0;
   return currentLevel >= requiredLevel;
-}
-
-/**
- * Normalizes an arbitrary role string into a valid WorkspaceRole, falling back to 'member'.
- */
-export function normalizeWorkspaceRole(role: string | undefined | null): WorkspaceRole {
-  if (!role) return WORKSPACE_ROLES.MEMBER;
-  const lower = role.toLowerCase().trim();
-  if (lower === WORKSPACE_ROLES.OWNER) return WORKSPACE_ROLES.OWNER;
-  if (lower === WORKSPACE_ROLES.ADMIN) return WORKSPACE_ROLES.ADMIN;
-  if (lower === WORKSPACE_ROLES.AGENT) return WORKSPACE_ROLES.AGENT;
-  return WORKSPACE_ROLES.MEMBER;
 }

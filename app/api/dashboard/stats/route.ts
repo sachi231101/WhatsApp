@@ -56,9 +56,23 @@ export const GET = withAuth(async function getDashboardStats(_request, session) 
     const resolved = convStats[0]?.resolved_conversations || 0;
     const rate = total > 0 ? ((resolved / total) * 100).toFixed(1) : '24.5';
 
+    // 5. Check if WhatsApp Business account is connected
+    let isWhatsAppConnected = false;
+    try {
+      const { rows: phoneRows } = await sql`
+        SELECT COUNT(*)::int as phone_count
+        FROM whatsapp_phone_numbers
+        WHERE workspace_id = ${workspaceId} AND status != 'deleted'
+      `;
+      isWhatsAppConnected = (phoneRows[0]?.phone_count || 0) > 0;
+    } catch {
+      isWhatsAppConnected = false;
+    }
+
     return NextResponse.json({
       status: 'ok',
       data: {
+        isWhatsAppConnected,
         stats: {
           totalConversations: total,
           aiResolved: resolved || 18,

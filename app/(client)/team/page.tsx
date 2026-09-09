@@ -1,207 +1,479 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
-  UserPlus,
-  Users,
+  Search,
+  Plus,
+  MoreHorizontal,
+  X,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Shield,
+  UserCheck,
+  Eye,
+  Mail,
+  User,
+  Trash2,
 } from 'lucide-react';
 
-interface Member {
+type Role = 'Owner' | 'Manager' | 'Agent' | 'Viewer';
+type Status = 'Active' | 'Inactive';
+
+interface TeamMember {
   id: string;
   name: string;
   email: string;
-  role: 'Owner' | 'Admin' | 'Agent';
-  status: 'Active' | 'Invited';
-  assignedChats: number;
+  initials: string;
+  avatarBg: string;
+  avatarText: string;
+  role: Role;
+  status: Status;
 }
 
-const INITIAL_MEMBERS: Member[] = [
+const INITIAL_TEAM: TeamMember[] = [
   {
-    id: 'mem-01',
-    name: 'Sachin (You)',
-    email: 'sachin@acmecorp.com',
+    id: 'tm-1',
+    name: 'Sachin Kumar',
+    email: 'sachin@abcacademy.com',
+    initials: 'SK',
+    avatarBg: 'bg-blue-100',
+    avatarText: 'text-blue-700',
     role: 'Owner',
     status: 'Active',
-    assignedChats: 14,
   },
   {
-    id: 'mem-02',
-    name: 'Priya Mehta',
-    email: 'priya@acmecorp.com',
-    role: 'Admin',
+    id: 'tm-2',
+    name: 'Rahul Sharma',
+    email: 'rahul@abcacademy.com',
+    initials: 'RS',
+    avatarBg: 'bg-red-100',
+    avatarText: 'text-red-700',
+    role: 'Agent',
     status: 'Active',
-    assignedChats: 28,
   },
   {
-    id: 'mem-03',
+    id: 'tm-3',
+    name: 'Priya Verma',
+    email: 'priya@abcacademy.com',
+    initials: 'PV',
+    avatarBg: 'bg-emerald-100',
+    avatarText: 'text-emerald-700',
+    role: 'Agent',
+    status: 'Active',
+  },
+  {
+    id: 'tm-4',
+    name: 'Amit Patel',
+    email: 'amit@abcacademy.com',
+    initials: 'AP',
+    avatarBg: 'bg-amber-100',
+    avatarText: 'text-amber-700',
+    role: 'Manager',
+    status: 'Active',
+  },
+  {
+    id: 'tm-5',
+    name: 'Sneha Iyer',
+    email: 'sneha@abcacademy.com',
+    initials: 'SI',
+    avatarBg: 'bg-purple-100',
+    avatarText: 'text-purple-700',
+    role: 'Agent',
+    status: 'Active',
+  },
+  {
+    id: 'tm-6',
     name: 'Vikram Singh',
-    email: 'vikram@acmecorp.com',
+    email: 'vikram@abcacademy.com',
+    initials: 'VS',
+    avatarBg: 'bg-cyan-100',
+    avatarText: 'text-cyan-700',
     role: 'Agent',
-    status: 'Active',
-    assignedChats: 42,
+    status: 'Inactive',
   },
   {
-    id: 'mem-04',
-    name: 'Sneha Patel',
-    email: 'sneha@acmecorp.com',
-    role: 'Agent',
-    status: 'Invited',
-    assignedChats: 0,
+    id: 'tm-7',
+    name: 'Neha Gupta',
+    email: 'neha@abcacademy.com',
+    initials: 'NG',
+    avatarBg: 'bg-pink-100',
+    avatarText: 'text-pink-700',
+    role: 'Viewer',
+    status: 'Active',
   },
 ];
 
 export default function TeamPage() {
-  const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
-  const [showModal, setShowModal] = useState(false);
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
-  const [role, setRole] = useState<'Admin' | 'Agent'>('Agent');
+  const [members, setMembers] = useState<TeamMember[]>(INITIAL_TEAM);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  const handleInvite = (e: React.FormEvent) => {
+  // Invite Form State
+  const [inviteName, setInviteName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<Role>('Agent');
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const filteredMembers = useMemo(() => {
+    return members.filter((m) => {
+      const q = searchQuery.toLowerCase().trim();
+      if (!q) return true;
+      return m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+    });
+  }, [members, searchQuery]);
+
+  const handleInviteSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
+    if (!inviteEmail.trim() || !inviteName.trim()) return;
 
-    const newMember: Member = {
-      id: 'mem-' + Date.now(),
-      name: name.trim() || email.split('@')[0],
-      email: email.trim(),
-      role,
-      status: 'Invited',
-      assignedChats: 0,
+    const initials = inviteName
+      .trim()
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .substring(0, 2)
+      .toUpperCase();
+
+    const colorPairs = [
+      { bg: 'bg-blue-100', text: 'text-blue-700' },
+      { bg: 'bg-purple-100', text: 'text-purple-700' },
+      { bg: 'bg-emerald-100', text: 'text-emerald-700' },
+      { bg: 'bg-amber-100', text: 'text-amber-700' },
+    ];
+    const picked = colorPairs[members.length % colorPairs.length];
+
+    const newMember: TeamMember = {
+      id: 'tm-' + Date.now(),
+      name: inviteName.trim(),
+      email: inviteEmail.trim(),
+      initials,
+      avatarBg: picked.bg,
+      avatarText: picked.text,
+      role: inviteRole,
+      status: 'Active',
     };
 
     setMembers((prev) => [...prev, newMember]);
-    setShowModal(false);
-    setEmail('');
-    setName('');
+    setShowInviteModal(false);
+    setInviteName('');
+    setInviteEmail('');
+    setInviteRole('Agent');
+    showToast(`Invitation sent to ${newMember.email}`);
+  };
+
+  const handleToggleStatus = (id: string) => {
+    setMembers((prev) =>
+      prev.map((m) => {
+        if (m.id === id) {
+          const nextStatus: Status = m.status === 'Active' ? 'Inactive' : 'Active';
+          showToast(`${m.name} is now ${nextStatus}`);
+          return { ...m, status: nextStatus };
+        }
+        return m;
+      })
+    );
+    setActiveMenuId(null);
+  };
+
+  const handleRoleChange = (id: string, newRole: Role) => {
+    setMembers((prev) =>
+      prev.map((m) => {
+        if (m.id === id) {
+          showToast(`${m.name}'s role updated to ${newRole}`);
+          return { ...m, role: newRole };
+        }
+        return m;
+      })
+    );
+    setActiveMenuId(null);
+  };
+
+  const handleRemoveMember = (id: string) => {
+    const member = members.find((m) => m.id === id);
+    if (!member) return;
+    setMembers((prev) => prev.filter((m) => m.id !== id));
+    setActiveMenuId(null);
+    showToast(`Removed ${member.name} from team`);
+  };
+
+  const getRoleBadgeClass = (role: Role) => {
+    switch (role) {
+      case 'Owner':
+        return 'bg-purple-100 text-purple-700';
+      case 'Manager':
+        return 'bg-amber-100 text-amber-700';
+      case 'Agent':
+        return 'bg-blue-100 text-blue-700';
+      case 'Viewer':
+        return 'bg-gray-100 text-gray-600';
+    }
+  };
+
+  const getStatusBadgeClass = (status: Status) => {
+    return status === 'Active'
+      ? 'bg-emerald-100 text-emerald-700'
+      : 'bg-red-100 text-red-700';
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <Users className="w-5 h-5 text-indigo-400" />
-            Team Members & Roles
-          </h1>
-          <p className="text-sm text-white/40 mt-0.5">
-            Manage agents, assign roles, and distribute customer conversations across your team.
-          </p>
+    <div className="flex-1 overflow-y-auto bg-[#f8fafc] px-8 py-8 min-h-screen">
+      {/* Toast */}
+      {toastMsg && (
+        <div className="fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl bg-emerald-600 text-white text-sm font-semibold shadow-2xl shadow-emerald-500/30 animate-in fade-in slide-in-from-top-4">
+          <CheckCircle2 className="w-4 h-4" /> {toastMsg}
+        </div>
+      )}
+
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Page Header */}
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">Team</h1>
+            <p className="text-xs sm:text-sm text-gray-500 mt-1">Manage your workspace members.</p>
+          </div>
+
+          <button
+            onClick={() => setShowInviteModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#1b59f8] hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-sm shadow-blue-500/25 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            Invite Member
+          </button>
         </div>
 
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-sm font-semibold text-white shadow-lg shadow-indigo-900/30 hover:opacity-90 transition-all cursor-pointer"
-        >
-          <UserPlus className="w-4 h-4" />
-          Invite Teammate
-        </button>
-      </div>
+        {/* Main Content Card */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
+          {/* Search Input */}
+          <div className="relative max-w-sm">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search team members..."
+              className="w-full pl-10 pr-4 py-2.5 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 placeholder-gray-400 transition-all"
+            />
+          </div>
 
-      {/* Members Table */}
-      <div className="bg-[#13151c] border border-white/[0.06] rounded-2xl overflow-hidden">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-white/[0.02] border-b border-white/[0.06] text-white/40 font-semibold uppercase tracking-wider text-[10px]">
-            <tr>
-              <th className="px-5 py-3">Member</th>
-              <th className="px-5 py-3">Email</th>
-              <th className="px-5 py-3">Role</th>
-              <th className="px-5 py-3">Status</th>
-              <th className="px-5 py-3">Assigned Chats</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/[0.04]">
-            {members.map((m) => (
-              <tr key={m.id} className="hover:bg-white/[0.02] transition-colors">
-                <td className="px-5 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-700 to-purple-900 flex items-center justify-center font-bold text-xs text-white border border-white/10">
-                      {m.name.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="font-semibold text-white/90">{m.name}</span>
-                  </div>
-                </td>
-                <td className="px-5 py-4 text-white/60">{m.email}</td>
-                <td className="px-5 py-4">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                    {m.role}
-                  </span>
-                </td>
-                <td className="px-5 py-4">
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                      m.status === 'Active'
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
-                    }`}
-                  >
-                    {m.status}
-                  </span>
-                </td>
-                <td className="px-5 py-4 text-white font-semibold">{m.assignedChats}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          {/* Members Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-gray-100 text-[11px] font-semibold text-gray-500">
+                  <th className="pb-3 px-4 font-semibold">Name</th>
+                  <th className="pb-3 px-4 font-semibold">Role</th>
+                  <th className="pb-3 px-4 font-semibold">Status</th>
+                  <th className="pb-3 px-6 font-semibold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 text-xs">
+                {filteredMembers.map((member) => (
+                  <tr key={member.id} className="hover:bg-gray-50/50 transition-colors">
+                    {/* Name & Avatar */}
+                    <td className="py-4 px-4">
+                      <div className="flex items-center gap-3.5">
+                        <div
+                          className={`w-9 h-9 rounded-full ${member.avatarBg} ${member.avatarText} flex items-center justify-center text-xs font-bold flex-shrink-0`}
+                        >
+                          {member.initials}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-gray-900">{member.name}</p>
+                          <p className="text-[11px] text-gray-400 mt-0.5">{member.email}</p>
+                        </div>
+                      </div>
+                    </td>
 
-      {/* Invite Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#141620] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <h3 className="text-base font-bold text-white mb-1">Invite Team Member</h3>
-            <p className="text-xs text-white/40 mb-5">
-              Send an email invitation to collaborate on your WhatsApp Business workspace.
+                    {/* Role */}
+                    <td className="py-4 px-4">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold ${getRoleBadgeClass(
+                          member.role
+                        )}`}
+                      >
+                        {member.role}
+                      </span>
+                    </td>
+
+                    {/* Status */}
+                    <td className="py-4 px-4">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold ${getStatusBadgeClass(
+                          member.status
+                        )}`}
+                      >
+                        {member.status}
+                      </span>
+                    </td>
+
+                    {/* Actions Menu */}
+                    <td className="py-4 px-6 text-right relative">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setActiveMenuId(activeMenuId === member.id ? null : member.id)
+                        }
+                        className="w-8 h-8 rounded-lg inline-flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                      >
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+
+                      {/* Dropdown Menu */}
+                      {activeMenuId === member.id && (
+                        <div className="absolute right-6 top-12 z-20 w-44 bg-white border border-gray-100 rounded-xl shadow-xl py-1 text-left animate-in fade-in zoom-in-95">
+                          <div className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-50">
+                            Change Role
+                          </div>
+                          {(['Owner', 'Manager', 'Agent', 'Viewer'] as Role[]).map((r) => (
+                            <button
+                              key={r}
+                              onClick={() => handleRoleChange(member.id, r)}
+                              className={`w-full px-3 py-1.5 text-xs text-left hover:bg-blue-50 flex items-center justify-between cursor-pointer ${
+                                member.role === r ? 'font-bold text-blue-600' : 'text-gray-700'
+                              }`}
+                            >
+                              {r}
+                              {member.role === r && <CheckCircle2 className="w-3 h-3 text-blue-600" />}
+                            </button>
+                          ))}
+
+                          <div className="border-t border-gray-100 my-1" />
+
+                          <button
+                            onClick={() => handleToggleStatus(member.id)}
+                            className="w-full px-3 py-1.5 text-xs text-left text-gray-700 hover:bg-gray-50 cursor-pointer"
+                          >
+                            Mark as {member.status === 'Active' ? 'Inactive' : 'Active'}
+                          </button>
+
+                          <button
+                            onClick={() => handleRemoveMember(member.id)}
+                            className="w-full px-3 py-1.5 text-xs text-left text-red-600 hover:bg-red-50 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Remove Member
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Footer / Pagination */}
+          <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+            <p className="text-xs text-gray-500">
+              {filteredMembers.length} team {filteredMembers.length === 1 ? 'member' : 'members'}
             </p>
 
-            <form onSubmit={handleInvite} className="space-y-4">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                className="w-8 h-8 rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-50 cursor-pointer transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                className="w-8 h-8 rounded-xl bg-[#1b59f8] text-white flex items-center justify-center text-xs font-bold shadow-xs"
+              >
+                1
+              </button>
+              <button
+                type="button"
+                className="w-8 h-8 rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-50 cursor-pointer transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Invite Member Modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-100">
               <div>
-                <label className="block text-xs font-semibold text-white/70 mb-1.5">Email Address *</label>
-                <input
-                  type="email"
-                  placeholder="agent@acmecorp.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full px-3.5 py-2 text-xs bg-white/[0.04] border border-white/[0.08] rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-indigo-500/50"
-                />
+                <h3 className="text-base font-bold text-gray-900">Invite Team Member</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Send an email invitation to collaborate on your WhatsApp workspace.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowInviteModal(false)}
+                className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleInviteSubmit} className="space-y-4 pt-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1.5">Full Name *</label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    required
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
+                    placeholder="e.g. Ramesh Chandra"
+                    className="w-full pl-10 pr-3 py-2 text-xs text-gray-900 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 placeholder-gray-400"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-white/70 mb-1.5">Full Name</label>
-                <input
-                  type="text"
-                  placeholder="Priya Mehta"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs bg-white/[0.04] border border-white/[0.08] rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-indigo-500/50"
-                />
+                <label className="block text-xs font-bold text-gray-900 mb-1.5">Email Address *</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="email"
+                    required
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="e.g. ramesh@abcacademy.com"
+                    className="w-full pl-10 pr-3 py-2 text-xs text-gray-900 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 placeholder-gray-400"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-white/70 mb-1.5">Workspace Role</label>
+                <label className="block text-xs font-bold text-gray-900 mb-1.5">Role</label>
                 <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as any)}
-                  className="w-full px-3.5 py-2 text-xs bg-[#1a1d27] border border-white/[0.08] rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value as Role)}
+                  className="w-full px-3 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer"
                 >
-                  <option value="Agent">Agent (Can view and answer assigned chats)</option>
-                  <option value="Admin">Admin (Can manage agents, campaigns & templates)</option>
+                  <option value="Agent">Agent (Can view and answer customer chats)</option>
+                  <option value="Manager">Manager (Can manage team and campaigns)</option>
+                  <option value="Owner">Owner (Full admin access to billing and workspace)</option>
+                  <option value="Viewer">Viewer (Read-only access to analytics)</option>
                 </select>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.08] text-xs font-semibold text-white/60 transition-all cursor-pointer"
+                  onClick={() => setShowInviteModal(false)}
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-xs font-semibold text-white shadow-lg shadow-indigo-900/30 hover:opacity-90 transition-all cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-[#1b59f8] hover:bg-blue-700 text-xs font-semibold text-white shadow-sm shadow-blue-500/25 transition-all cursor-pointer"
                 >
                   Send Invitation
                 </button>

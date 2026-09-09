@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { auth0 } from '@/lib/auth0';
 
 // Admin-only paths
 const ADMIN_PATHS = [
@@ -16,6 +17,7 @@ const ADMIN_PATHS = [
 
 // Client SaaS paths
 const CLIENT_PATHS = [
+  '/app',
   '/dashboard',
   '/inbox',
   '/ai-agents',
@@ -33,8 +35,6 @@ const CLIENT_PATHS = [
 // Public authentication paths
 const AUTH_PATHS = [
   '/auth/portal',
-  '/auth/login',
-  '/auth/logout',
   '/client/login',
   '/client/register',
   '/login',
@@ -46,30 +46,77 @@ const AUTH_PATHS = [
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Always allow API auth, webhooks, and public static assets
+  // 1. Delegate Auth0 specific endpoints (/auth/login, /auth/logout, /auth/callback) to Auth0 SDK
+  if (pathname === '/auth/login' || pathname === '/auth/logout' || pathname === '/auth/callback') {
+    try {
+      return await auth0.middleware(request);
+    } catch {
+      // Fallback if Auth0 config is not yet filled in dev environment
+      return NextResponse.next();
+    }
+  }
+
+  // 2. Always allow APIs, webhooks, and public static assets
   if (
-    pathname.startsWith('/api/auth') ||
-    pathname.startsWith('/api/webhooks') ||
-    pathname === '/privacy'
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/_next') ||
+    pathname === '/privacy' ||
+    pathname === '/about' ||
+    pathname === '/features' ||
+    pathname === '/pricing' ||
+    pathname === '/contact'
   ) {
     return NextResponse.next();
   }
 
-  const hasSession = request.cookies.has('wazzapp_session');
+  // Session detection (Auth0 cookie or local encrypted session)
+  const hasAuth0Session =
+    request.cookies.has('appSession') ||
+    request.cookies.has('__session') ||
+    request.cookies.has('auth0.is.authenticated');
+  const hasLocalSession = request.cookies.has('wazzapp_session');
+  const hasSession = hasLocalSession || hasAuth0Session;
   const userRole = request.cookies.get('wazzapp_role')?.value; // 'admin' | 'client'
+  const hasWorkspace = request.cookies.has('wazzapp_workspace_id');
 
-  // If already logged in and visiting login/register pages, redirect to their home
+  // 3. /app prefix redirect to client application paths
+  if (pathname === '/app') {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+  if (pathname.startsWith('/app/')) {
+    const targetPath = pathname.replace(/^\/app/, '');
+    return NextResponse.redirect(new URL(targetPath || '/dashboard', request.url));
+  }
+
+  // 4. Onboarding route protection
+  if (pathname === '/onboarding') {
+    if (!hasSession) {
+      const loginUrl = new URL('/auth/login', request.url);
+      loginUrl.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    // If user already has an active workspace selected, take them to their app
+    if (hasWorkspace) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    return NextResponse.next();
+  }
+
+  // 5. If already logged in and visiting login/register pages, redirect to their home
   if (AUTH_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
     if (hasSession) {
       if (userRole === 'admin') {
-        return NextResponse.redirect(new URL('/', request.url));
+        return NextResponse.redirect(new URL('/admin', request.url));
+      }
+      if (!hasWorkspace) {
+        return NextResponse.redirect(new URL('/onboarding', request.url));
       }
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
     return NextResponse.next();
   }
 
-  // Check Admin-only routes
+  // 6. Check Admin-only routes
   const isAdminPath = ADMIN_PATHS.some((prefix) => pathname === prefix || pathname.startsWith(prefix + '/'));
   if (isAdminPath) {
     if (!hasSession) {
@@ -86,15 +133,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check Client SaaS routes
+  // 7. Check Client SaaS routes
   const isClientPath = CLIENT_PATHS.some((prefix) => pathname === prefix || pathname.startsWith(prefix + '/'));
   if (isClientPath) {
     if (!hasSession) {
-      const loginUrl = new URL('/client/login', request.url);
+      const loginUrl = new URL('/auth/login', request.url);
       loginUrl.searchParams.set('redirect', pathname);
       return NextResponse.redirect(loginUrl);
     }
-    // Authenticated users (clients and admins) are allowed
+
+    // Authenticated users with no active workspace go to onboarding
+    if (!hasWorkspace && userRole !== 'admin') {
+      return NextResponse.redirect(new URL('/onboarding', request.url));
+    }
+
     return NextResponse.next();
   }
 
@@ -104,7 +156,7 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
+     * Match all request paths except for:
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico, sitemap.xml, robots.txt (metadata files)

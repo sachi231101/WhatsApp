@@ -520,40 +520,51 @@ export default function InboxLayout({ phones }: { phones: PhoneDetails[] }) {
 
   // Ably connection — single connection for ALL phones
   useEffect(() => {
-    const ablyClient = new Ably.Realtime({
-      authCallback: async (_, callback) => {
-        try {
-          const response = await fetch('/api/ably-auth');
-          const tokenRequest = await response.json();
-          callback(null, tokenRequest);
-        } catch (error) {
-          callback(error, null);
+    let ablyClient: Ably.Realtime | null = null;
+    let channel: any = null;
+    let cancelled = false;
+
+    const setupAbly = async () => {
+      try {
+        const response = await fetch('/api/ably-auth');
+        if (!response.ok || cancelled) {
+          setAblyState('disconnected');
+          return;
         }
-      },
-    });
+        const data = await response.json();
+        if (!data || data.enabled === false || data.error || cancelled) {
+          setAblyState('disconnected');
+          return;
+        }
 
-    ablyClient.connection.on('connected', () => {
-      setAblyState('connected');
-    });
+        ablyClient = new Ably.Realtime({
+          authCallback: async (_, callback) => {
+            try {
+              const res = await fetch('/api/ably-auth');
+              if (!res.ok) {
+                callback({ message: `Ably auth unavailable (${res.status})`, statusCode: 403, code: 40101 } as any, null);
+                return;
+              }
+              const tokenData = await res.json();
+              if (tokenData.error || tokenData.enabled === false) {
+                callback({ message: tokenData.error || 'Ably disabled', statusCode: 403, code: 40101 } as any, null);
+                return;
+              }
+              callback(null, tokenData);
+            } catch (error) {
+              callback({ message: (error as Error)?.message || 'Ably auth error', statusCode: 403, code: 40101 } as any, null);
+            }
+          },
+        });
 
-    ablyClient.connection.on('connecting', () => {
-      setAblyState('connecting');
-    });
+        ablyClient.connection.on('connected', () => setAblyState('connected'));
+        ablyClient.connection.on('connecting', () => setAblyState('connecting'));
+        ablyClient.connection.on('disconnected', () => setAblyState('disconnected'));
+        ablyClient.connection.on('suspended', () => setAblyState('failed'));
+        ablyClient.connection.on('failed', () => setAblyState('failed'));
 
-    ablyClient.connection.on('disconnected', () => {
-      setAblyState('disconnected');
-    });
-
-    ablyClient.connection.on('suspended', () => {
-      setAblyState('failed');
-    });
-
-    ablyClient.connection.on('failed', () => {
-      setAblyState('failed');
-    });
-
-    const channel = ablyClient.channels.get('get-started');
-    channel.subscribe('first', (message) => {
+        channel = ablyClient.channels.get('get-started');
+        channel.subscribe('first', (message: any) => {
       const ownedPhoneIds = new Set(phonesRef.current.map((p) => p.id));
       const fields = message.data.entry?.flatMap((e: { changes?: { field: string }[] }) => e.changes?.map((c) => c.field));
       console.log('[Webhook] Received first event. fields:', fields, 'owned phones:', [...ownedPhoneIds]);
@@ -797,12 +808,21 @@ export default function InboxLayout({ phones }: { phones: PhoneDetails[] }) {
         }
       }
     });
+  } catch {
+    setAblyState('failed');
+  }
+};
+
+    setupAbly();
 
     return () => {
+      cancelled = true;
       if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
       if (endedResetTimeoutRef.current) clearTimeout(endedResetTimeoutRef.current);
-      channel.unsubscribe();
-      ablyClient.close();
+      try {
+        channel?.unsubscribe();
+        ablyClient?.close();
+      } catch {}
     };
   }, [addMessage, addChat, markUnread, markMissedCall]);
 

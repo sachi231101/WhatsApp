@@ -1,6 +1,7 @@
 import { pgTable, uuid, varchar, text, timestamp, integer, boolean, jsonb, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { workspaces, users, tenants } from './tenants';
 import { contacts } from './messaging';
+import { projects } from './projects';
 
 export const auditLogs = pgTable(
   'audit_logs',
@@ -29,19 +30,32 @@ export const webhookEvents = pgTable(
   {
     id: uuid('id').defaultRandom().primaryKey(),
     workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'set null' }),
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    provider: varchar('provider', { length: 50 }).default('meta_whatsapp').notNull(),
+    eventType: varchar('event_type', { length: 100 }).default('messages'),
+    externalEventId: varchar('external_event_id', { length: 255 }),
     idempotencyHash: varchar('idempotency_hash', { length: 64 }).notNull().unique(),
     metaWabaId: varchar('meta_waba_id', { length: 100 }),
-    field: varchar('field', { length: 50 }).notNull(), // messages, message_deliveries, calls
+    field: varchar('field', { length: 50 }).default('messages'),
     payload: jsonb('payload').notNull(),
-    processingStatus: varchar('processing_status', { length: 50 }).default('pending').notNull(), // pending, processed, ignored, failed
+    signatureVerified: boolean('signature_verified').default(false).notNull(),
+    status: varchar('status', { length: 50 }).default('pending').notNull(),
+    processingStatus: varchar('processing_status', { length: 50 }).default('pending').notNull(),
+    attempts: integer('attempts').default(0).notNull(),
     retryCount: integer('retry_count').default(0).notNull(),
+    error: text('error'),
     errorMessage: text('error_message'),
     receivedAt: timestamp('received_at', { withTimezone: true }).defaultNow().notNull(),
     processedAt: timestamp('processed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     uniqueIndex('webhook_events_hash_idx').on(table.idempotencyHash),
+    index('webhook_events_ext_idx').on(table.externalEventId),
     index('webhook_events_queue_idx').on(table.processingStatus, table.receivedAt),
+    index('webhook_events_status_idx').on(table.status, table.receivedAt),
+    index('webhook_events_project_idx').on(table.projectId),
   ],
 );
 

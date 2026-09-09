@@ -7,24 +7,12 @@ export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/workspaces
- * Lists all projects (workspaces) available to the authenticated user.
- * Auto-provisions a default project if the user currently has none.
+ * Lists all workspaces available to the authenticated user.
  */
 export const GET = withAuth(async function listWorkspaces(_request: NextRequest, session) {
   try {
     const userId = session.workspace.userId;
-    let workspaces = await workspaceService.getUserWorkspaces(userId);
-
-    // If no workspaces exist yet, auto-provision a default project
-    if (workspaces.length === 0) {
-      const defaultWs = await workspaceService.createWorkspace({
-        tenantId: session.workspace.tenantId,
-        name: 'Default Project',
-        slug: 'default-project',
-        createdByUserId: userId,
-      });
-      workspaces = [defaultWs];
-    }
+    const workspaces = await workspaceService.getUserWorkspaces(userId);
 
     // Enrich each workspace with its connected WhatsApp number and metadata
     const data = await Promise.all(
@@ -67,11 +55,12 @@ export const GET = withAuth(async function listWorkspaces(_request: NextRequest,
       userName: session.workspace.userName || session.user.name || 'User',
       userEmail: session.user.email,
       activeWorkspaceId: session.workspace.workspaceId,
+      needsOnboarding: workspaces.length === 0,
     });
   } catch (error) {
     console.error('Failed to list workspaces:', error);
     return NextResponse.json(
-      { error: 'Failed to retrieve workspaces' },
+      { error: 'We couldn’t load your workspace. Try again.' },
       { status: 500 },
     );
   }
@@ -79,7 +68,7 @@ export const GET = withAuth(async function listWorkspaces(_request: NextRequest,
 
 /**
  * POST /api/workspaces
- * Creates a new project (workspace) for the user.
+ * Creates a new workspace for the authenticated user with transactional OWNER membership.
  */
 export const POST = withAuth(async function createWorkspace(request: NextRequest, session) {
   try {
@@ -88,16 +77,13 @@ export const POST = withAuth(async function createWorkspace(request: NextRequest
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return NextResponse.json(
-        { error: 'Project name is required.' },
+        { error: 'Workspace name is required.' },
         { status: 400 },
       );
     }
 
     const cleanName = name.trim();
-    const cleanSlug =
-      typeof slug === 'string' && slug.trim()
-        ? slug.trim()
-        : cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Date.now().toString(36).slice(-4);
+    const cleanSlug = typeof slug === 'string' && slug.trim() ? slug.trim() : undefined;
 
     const workspace = await workspaceService.createWorkspace({
       tenantId: session.workspace.tenantId,
@@ -108,7 +94,7 @@ export const POST = withAuth(async function createWorkspace(request: NextRequest
       createdByUserId: session.workspace.userId,
     });
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         status: 'ok',
         data: {
@@ -118,12 +104,24 @@ export const POST = withAuth(async function createWorkspace(request: NextRequest
           status: 'Created',
           activePlan: 'FREE FOREVER',
           connectedNumber: 'N/A',
+          role: workspace.role,
           createdAt: workspace.createdAt,
-          isActive: false,
+          isActive: true,
         },
       },
       { status: 201 },
     );
+
+    // Automatically set cookie for newly created workspace
+    response.cookies.set('wazzapp_workspace_id', workspace.id, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+    });
+
+    return response;
   } catch (error) {
     console.error('Failed to create workspace:', error);
     return NextResponse.json(

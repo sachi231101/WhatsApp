@@ -1,5 +1,7 @@
 import { pgTable, uuid, varchar, text, timestamp, integer, boolean, numeric, jsonb, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { workspaces, users } from './tenants';
+import { projects } from './projects';
+import { conversations } from './messaging';
 
 export const aiProviderSettings = pgTable(
   'ai_provider_settings',
@@ -29,24 +31,119 @@ export const aiAgents = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .references(() => projects.id, { onDelete: 'cascade' }),
     providerSettingId: uuid('provider_setting_id').references(() => aiProviderSettings.id, { onDelete: 'restrict' }),
     name: varchar('name', { length: 100 }).notNull(),
     slug: varchar('slug', { length: 100 }).notNull(),
+    description: text('description'),
     avatarUrl: text('avatar_url'),
-    roleDescription: text('role_description').notNull(),
-    modelName: varchar('model_name', { length: 100 }).default('gemini-2.0-flash').notNull(),
-    temperature: numeric('temperature', { precision: 3, scale: 2 }).default('0.20').notNull(),
-    systemPrompt: text('system_prompt').notNull(),
-    tone: varchar('tone', { length: 50 }).default('friendly').notNull(),
+    roleDescription: text('role_description'),
+    modelName: varchar('model_name', { length: 100 }).default('gpt-4o-mini').notNull(),
+    temperature: numeric('temperature', { precision: 3, scale: 2 }).default('0.30').notNull(),
+    systemPrompt: text('system_prompt'),
+    tone: varchar('tone', { length: 50 }).default('Professional').notNull(),
     autoTakeoverEnabled: boolean('auto_takeover_enabled').default(true).notNull(),
     humanHandoffThreshold: numeric('human_handoff_threshold', { precision: 3, scale: 2 }).default('0.70').notNull(),
-    status: varchar('status', { length: 50 }).default('active').notNull(),
+    status: varchar('status', { length: 50 }).default('DRAFT').notNull(), // DRAFT, ACTIVE, PAUSED, ARCHIVED
+    handlingMode: varchar('handling_mode', { length: 50 }).default('AI_HANDLING').notNull(), // AI_HANDLING, HUMAN_HANDLING, HYBRID
+    currentVersionId: uuid('current_version_id'),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
   },
   (table) => [
-    uniqueIndex('ai_agent_ws_slug_idx').on(table.workspaceId, table.slug),
+    uniqueIndex('ai_agent_proj_slug_idx').on(table.projectId, table.slug),
     index('ai_agent_ws_idx').on(table.workspaceId),
+    index('ai_agent_proj_idx').on(table.projectId),
+    index('ai_agent_status_idx').on(table.status),
+  ],
+);
+
+export const aiAgentVersions = pgTable(
+  'ai_agent_versions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => aiAgents.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    versionNumber: integer('version_number').notNull(),
+    status: varchar('status', { length: 50 }).default('DRAFT').notNull(), // DRAFT, PUBLISHED, ARCHIVED
+    role: text('role').notNull(),
+    systemInstructions: text('system_instructions').notNull(),
+    tone: varchar('tone', { length: 50 }).default('Professional').notNull(),
+    language: varchar('language', { length: 50 }).default('English').notNull(),
+    greetingMessage: text('greeting_message'),
+    fallbackMessage: text('fallback_message'),
+    responseBehavior: jsonb('response_behavior').default({}).notNull(),
+    escalationEnabled: boolean('escalation_enabled').default(true).notNull(),
+    escalationMessage: text('escalation_message'),
+    escalationConditions: jsonb('escalation_conditions').default([]).notNull(),
+    maxResponseLength: integer('max_response_length').default(300).notNull(),
+    temperature: numeric('temperature', { precision: 3, scale: 2 }).default('0.30').notNull(),
+    model: varchar('model', { length: 100 }).default('gpt-4o-mini').notNull(),
+    provider: varchar('provider', { length: 50 }).default('openai').notNull(),
+    configuration: jsonb('configuration').default({}).notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('ai_agent_ver_num_idx').on(table.agentId, table.versionNumber),
+    index('ai_agent_ver_agent_idx').on(table.agentId),
+    index('ai_agent_ver_proj_idx').on(table.projectId),
+  ],
+);
+
+export const aiAgentKnowledgeBases = pgTable(
+  'ai_agent_knowledge_bases',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => aiAgents.id, { onDelete: 'cascade' }),
+    knowledgeBaseId: uuid('knowledge_base_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('ai_agent_kb_idx').on(table.agentId, table.knowledgeBaseId),
+  ],
+);
+
+export const aiUsage = pgTable(
+  'ai_usage',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    agentId: uuid('agent_id').references(() => aiAgents.id, { onDelete: 'set null' }),
+    agentVersionId: uuid('agent_version_id').references(() => aiAgentVersions.id, { onDelete: 'set null' }),
+    conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'set null' }),
+    provider: varchar('provider', { length: 50 }).notNull(),
+    model: varchar('model', { length: 100 }).notNull(),
+    inputTokens: integer('input_tokens').default(0).notNull(),
+    outputTokens: integer('output_tokens').default(0).notNull(),
+    totalTokens: integer('total_tokens').default(0).notNull(),
+    latencyMs: integer('latency_ms').default(0).notNull(),
+    status: varchar('status', { length: 50 }).default('SUCCESS').notNull(), // SUCCESS, FAILED, ESCALATED
+    errorCode: varchar('error_code', { length: 100 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('ai_usage_ws_created_idx').on(table.workspaceId, table.createdAt),
+    index('ai_usage_proj_created_idx').on(table.projectId, table.createdAt),
+    index('ai_usage_agent_created_idx').on(table.agentId, table.createdAt),
   ],
 );
 

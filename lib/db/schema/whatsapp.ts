@@ -1,5 +1,6 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, uniqueIndex, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, boolean, uniqueIndex, index, jsonb } from 'drizzle-orm/pg-core';
 import { workspaces } from './tenants';
+import { projects } from './projects';
 
 export const whatsappAccounts = pgTable(
   'whatsapp_accounts',
@@ -101,3 +102,40 @@ export const phoneNumberCertificates = pgTable(
     uniqueIndex('phone_cert_phone_idx').on(table.whatsappPhoneNumberId),
   ],
 );
+
+export const whatsappConnections = pgTable(
+  'whatsapp_connections',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    wabaId: varchar('waba_id', { length: 100 }).notNull(),
+    phoneNumberId: varchar('phone_number_id', { length: 100 }),
+    displayPhoneNumber: varchar('display_phone_number', { length: 50 }),
+    verifiedName: varchar('verified_name', { length: 255 }),
+    businessName: varchar('business_name', { length: 255 }),
+    status: varchar('status', { length: 50 }).default('PENDING').notNull(),
+    encryptedAccessToken: text('encrypted_access_token').notNull(),
+    tokenIv: varchar('token_iv', { length: 64 }),
+    tokenTag: varchar('token_tag', { length: 64 }),
+    tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
+    metadata: jsonb('metadata').default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    lastVerifiedAt: timestamp('last_verified_at', { withTimezone: true }),
+    disconnectedAt: timestamp('disconnected_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('whatsapp_connections_project_idx').on(table.projectId),
+    index('whatsapp_connections_ws_idx').on(table.workspaceId),
+    index('whatsapp_connections_phone_idx').on(table.phoneNumberId),
+    index('whatsapp_connections_waba_idx').on(table.wabaId),
+  ],
+);
+
+export type WhatsAppConnection = typeof whatsappConnections.$inferSelect;
+export type NewWhatsAppConnection = typeof whatsappConnections.$inferInsert;

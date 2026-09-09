@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { SessionInfo } from '@/app/types/api';
 
 declare const FB: any;
@@ -38,28 +38,37 @@ export default function EmbeddedSignupLauncher({
   const sessionInfoRef = useRef<SessionInfo | null>(null);
   const authCodeRef = useRef<string | null>(null);
 
-  const stopPolling = () => {
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  const onStartedRef = useRef(onStarted);
+  onStartedRef.current = onStarted;
+
+  const stopPolling = useCallback(() => {
     if (pollTimerRef.current !== null) {
       clearInterval(pollTimerRef.current);
       pollTimerRef.current = null;
     }
-  };
+  }, []);
 
-  const clearState = () => {
+  const clearState = useCallback(() => {
     esInProgress.current = false;
     popupWindowRef.current = null;
     stopPolling();
-  };
+  }, [stopPolling]);
 
-  const triggerCompletionIfReady = () => {
+  const triggerCompletionIfReady = useCallback(() => {
     if (authCodeRef.current && sessionInfoRef.current) {
       const code = authCodeRef.current;
       const session = sessionInfoRef.current;
       authCodeRef.current = null;
       sessionInfoRef.current = null;
-      onSuccess(code, session);
+      onSuccessRef.current(code, session);
     }
-  };
+  }, []);
 
   const fbLoginCallback = (response: { authResponse?: { code: string }; error?: any }) => {
     clearState();
@@ -148,7 +157,7 @@ export default function EmbeddedSignupLauncher({
         if (data.type === 'WA_EMBEDDED_SIGNUP') {
           if (data.data?.current_step) {
             clearState();
-            onCancel?.();
+            onCancelRef.current?.();
           } else {
             sessionInfoRef.current = data;
             triggerCompletionIfReady();
@@ -165,7 +174,7 @@ export default function EmbeddedSignupLauncher({
       window.removeEventListener('message', handleMessage);
       stopPolling();
     };
-  }, [appId]);
+  }, [appId, clearState, stopPolling, triggerCompletionIfReady]);
 
   return (
     <button

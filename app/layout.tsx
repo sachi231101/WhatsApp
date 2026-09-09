@@ -30,8 +30,25 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Wazzi App — WhatsApp AI SaaS',
-  description: 'Your WhatsApp business, powered by AI.',
+  title: {
+    default: 'Wazzi App — AI-Powered WhatsApp Business Platform',
+    template: '%s | Wazzi App',
+  },
+  description:
+    'Connect WhatsApp, automate conversations, empower your team with AI, and turn every customer interaction into measurable business outcomes.',
+  openGraph: {
+    title: 'Wazzi App — Turn WhatsApp conversations into your business engine',
+    description:
+      'Connect WhatsApp, automate conversations, empower your team with AI, and turn every customer interaction into measurable business outcomes.',
+    siteName: 'Wazzi App',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Wazzi App — AI-Powered WhatsApp Business Platform',
+    description:
+      'Connect WhatsApp, automate conversations, empower your team with AI, and turn every customer interaction into measurable business outcomes.',
+  },
 };
 
 export default function RootLayout({
@@ -45,8 +62,11 @@ export default function RootLayout({
   // If there are missing environment variables, show the error page
   if (missingEnvVars.length > 0) {
     return (
-      <html lang="en">
-        <body className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
+      <html lang="en" suppressHydrationWarning>
+        <body
+          className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} font-sans antialiased min-h-full`}
+          suppressHydrationWarning
+        >
           <MissingEnvVars missingVars={missingEnvVars} />
         </body>
       </html>
@@ -54,10 +74,12 @@ export default function RootLayout({
   }
 
   return (
-    <html lang="en" className="h-full">
-      <Script src="https://connect.facebook.net/en_US/sdk.js" strategy="afterInteractive" />
-
-      <body className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} font-sans antialiased h-full overflow-hidden`}>
+    <html lang="en" className="h-full scroll-smooth" suppressHydrationWarning>
+      <body
+        className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} font-sans antialiased min-h-full bg-[#FAFAFC] text-slate-900`}
+        suppressHydrationWarning
+      >
+        <Script src="https://connect.facebook.net/en_US/sdk.js" strategy="afterInteractive" />
         <ErrorBoundary>{children}</ErrorBoundary>
         <SpeedInsights />
         <Analytics />

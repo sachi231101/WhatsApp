@@ -194,16 +194,42 @@ export default function TeamInboxPage() {
   useEffect(() => {
     let client: Ably.Realtime | null = null;
     let channel: any = null;
+    let cancelled = false;
+
     const setup = async () => {
       try {
+        // Pre-check if Ably is enabled before creating client to avoid unnecessary connection attempts
+        const initialRes = await fetch('/api/ably-auth');
+        if (!initialRes.ok || cancelled) return;
+        const initialData = await initialRes.json();
+        if (!initialData || initialData.enabled === false || initialData.error || cancelled) {
+          // Ably is disabled or not configured — stay in polling/REST mode cleanly
+          return;
+        }
+
         client = new Ably.Realtime({
           authCallback: async (_, cb) => {
             try {
               const r = await fetch('/api/ably-auth');
-              cb(null, await r.json());
-            } catch (e) { cb(e as any, null); }
+              if (!r.ok) {
+                cb({ message: `Ably auth unavailable (${r.status})`, statusCode: 403, code: 40101 } as any, null);
+                return;
+              }
+              const data = await r.json();
+              if (data.error || data.enabled === false) {
+                cb({ message: data.error || 'Ably disabled', statusCode: 403, code: 40101 } as any, null);
+                return;
+              }
+              cb(null, data);
+            } catch (e) {
+              cb({ message: (e as Error)?.message || 'Ably auth error', statusCode: 403, code: 40101 } as any, null);
+            }
           },
         });
+
+        // Silence unhandled connection failure events
+        client.connection.on('failed', () => {});
+
         channel = client.channels.get('get-started');
         channel.subscribe('first', () => {
           if (selectedId && !selectedId.startsWith('d')) {
@@ -215,8 +241,15 @@ export default function TeamInboxPage() {
         });
       } catch { /* realtime optional */ }
     };
+
     setup();
-    return () => { channel?.unsubscribe(); client?.close(); };
+    return () => {
+      cancelled = true;
+      try {
+        channel?.unsubscribe();
+        client?.close();
+      } catch {}
+    };
   }, [selectedId, fetchConversations]);
 
   // ── Send Message ─────────────────────────────────────────────────────────────

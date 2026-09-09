@@ -248,12 +248,13 @@ export class WebhookRouterService {
       return { status: 'error', processedCount: 0, eventsLogged: 0, workspaceIds: [] };
     }
 
-    // 2. Setup Ably realtime client if key available
+    // 2. Setup Ably realtime client if valid key available
     let ably: Ably.Realtime | null = null;
     let legacyChannel: any = null;
-    if (ablyKey) {
+    const isValidKey = Boolean(ablyKey && ablyKey.includes(':') && !ablyKey.startsWith('eyJ') && ablyKey !== 'your-ably-api-key');
+    if (isValidKey) {
       try {
-        ably = new Ably.Realtime({ key: ablyKey, clientId: 'webhook_router' });
+        ably = new Ably.Realtime({ key: ablyKey!, clientId: 'webhook_router' });
         await ably.connection.once('connected');
         legacyChannel = ably.channels.get('get-started');
         // Publish raw data to legacy viewer

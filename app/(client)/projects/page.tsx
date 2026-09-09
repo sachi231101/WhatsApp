@@ -1,85 +1,96 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import {
-  Sparkles,
   FolderKanban,
-  Phone,
-  CheckCircle2,
+  Plus,
+  Search,
   AlertCircle,
   Loader2,
+  X,
   ArrowRight,
-  ShieldCheck,
-  Plus,
-  Check,
-  Trash2,
+  CheckCircle2,
+  Calendar,
+  Layers,
+  Bot,
+  MessageSquare,
+  Users,
+  Archive,
 } from 'lucide-react';
 
 interface Project {
   id: string;
+  workspaceId: string;
   name: string;
+  description: string | null;
   slug: string;
   status: string;
-  activePlan: string;
-  connectedNumber: string;
   createdAt: string;
-  isActive: boolean;
+  archivedAt?: string | null;
 }
 
 export default function ProjectsPage() {
-  const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [userName, setUserName] = useState('Sachin');
   const [loading, setLoading] = useState(true);
-  const [projectName, setProjectName] = useState('');
+  const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectDesc, setNewProjectDesc] = useState('');
   const [creating, setCreating] = useState(false);
-  const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async (status: 'active' | 'archived') => {
     try {
       setLoading(true);
-      const res = await fetch('/api/workspaces');
+      setErrorMsg(null);
+      const res = await fetch(`/api/projects?status=${status}`);
       const json = await res.json();
       if (json.status === 'ok' && Array.isArray(json.data)) {
         setProjects(json.data);
-        if (json.userName) {
-          setUserName(json.userName);
-        }
+      } else {
+        setErrorMsg(json.error || 'Failed to load projects.');
       }
     } catch (err) {
       console.error('Failed to load projects:', err);
+      setErrorMsg('Failed to load projects. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchProjects();
-  }, []);
+    fetchProjects(activeTab);
+  }, [activeTab, fetchProjects]);
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!projectName.trim() || creating) return;
+    if (!newProjectName.trim() || creating) return;
 
     try {
       setCreating(true);
       setErrorMsg(null);
-      const res = await fetch('/api/workspaces', {
+      const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: projectName.trim() }),
+        body: JSON.stringify({
+          name: newProjectName.trim(),
+          description: newProjectDesc.trim() || undefined,
+        }),
       });
+
       const json = await res.json();
-      if (json.status === 'ok' && json.data) {
-        setProjects((prev) => [json.data, ...prev]);
-        setProjectName('');
+      if (res.ok && json.status === 'ok') {
+        setNewProjectName('');
+        setNewProjectDesc('');
+        setShowModal(false);
         setToastMsg(`Project "${json.data.name}" created successfully!`);
-        setTimeout(() => setToastMsg(null), 3500);
+        setTimeout(() => setToastMsg(null), 3000);
+        await fetchProjects(activeTab);
       } else {
-        setErrorMsg(json.error || 'Failed to create project');
+        setErrorMsg(json.message || json.error || 'Failed to create project');
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Error creating project');
@@ -88,26 +99,8 @@ export default function ProjectsPage() {
     }
   };
 
-  const handleSelectProject = async (projectId: string) => {
-    try {
-      setSwitchingId(projectId);
-      const res = await fetch('/api/workspaces/select', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId: projectId }),
-      });
-      if (res.ok) {
-        router.push('/dashboard');
-        router.refresh();
-      }
-    } catch (err) {
-      console.error('Failed to switch project:', err);
-      setSwitchingId(null);
-    }
-  };
-
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return 'Sep 7, 2026';
+    if (!dateStr) return '';
     try {
       const d = new Date(dateStr);
       return d.toLocaleDateString('en-US', {
@@ -120,270 +113,276 @@ export default function ProjectsPage() {
     }
   };
 
+  const filteredProjects = projects.filter((p) =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
   return (
-    <div className="space-y-8 max-w-6xl pb-16">
+    <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6 max-w-7xl mx-auto w-full">
       {/* Toast Alert */}
       {toastMsg && (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-emerald-500 text-white font-bold text-sm shadow-2xl shadow-emerald-500/40 animate-bounce">
-          <CheckCircle2 className="w-5 h-5" />
+        <div className="fixed top-6 right-6 z-50 flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-blue-600 text-white font-bold text-sm shadow-xl shadow-blue-500/20">
+          <CheckCircle2 className="w-5 h-5 text-white" />
           <span>{toastMsg}</span>
         </div>
       )}
 
-      {/* Greeting & Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      {/* Header Section */}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">
-              Project Hub
-            </span>
-          </div>
-          <h1 className="text-3xl font-black text-white tracking-tight">
-            Welcome, {userName}
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+            Projects
           </h1>
-          <p className="text-xs text-white/50 mt-1">
-            Manage your isolated business projects. Each project connects to its own WhatsApp Business number, contacts, and campaigns.
+          <p className="text-xs sm:text-sm text-gray-500 mt-1 max-w-2xl leading-relaxed">
+            Manage your business operations by project.
           </p>
+        </div>
+
+        <button
+          onClick={() => setShowModal(true)}
+          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Create Project</span>
+        </button>
+      </div>
+
+      {/* Filter Tabs & Search Controls */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-gray-100 shadow-2xs">
+        <div className="flex items-center gap-1 bg-gray-100/70 p-1 rounded-xl w-full sm:w-auto">
+          <button
+            onClick={() => setActiveTab('active')}
+            className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'active'
+                ? 'bg-white text-gray-900 shadow-2xs'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            Active Projects
+          </button>
+          <button
+            onClick={() => setActiveTab('archived')}
+            className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeTab === 'archived'
+                ? 'bg-white text-gray-900 shadow-2xs'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            <Archive className="w-3.5 h-3.5" />
+            <span>Archived</span>
+          </button>
+        </div>
+
+        <div className="relative w-full sm:w-72">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search projects..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+          />
         </div>
       </div>
 
       {/* Error notification if any */}
       {errorMsg && (
-        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2.5">
+        <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2.5">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
           <span>{errorMsg}</span>
         </div>
       )}
 
-      {/* ─── Create New Project Hero Card ─── */}
-      <div className="rounded-3xl bg-gradient-to-br from-[#12231f] via-[#121622] to-[#10131d] border border-emerald-500/25 p-8 md:p-10 flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl shadow-emerald-950/40 relative overflow-hidden group">
-        {/* Glow ambient */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
-
-        {/* Form Content */}
-        <div className="max-w-md w-full z-10 space-y-4">
-          <div>
-            <h2 className="text-2xl font-black text-white tracking-tight mb-1">
-              Create New Project
-            </h2>
-            <p className="text-xs text-emerald-200/70 font-medium leading-relaxed">
-              One Business Project is associated with one WhatsApp Business API Number
-            </p>
-          </div>
-
-          <form onSubmit={handleCreateProject} className="space-y-4 pt-1">
-            <div>
-              <input
-                type="text"
-                placeholder="Enter your project name"
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                className="w-full px-4 py-3.5 bg-black/40 border border-white/15 rounded-2xl text-sm text-white placeholder-white/40 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30 shadow-inner transition-all font-medium"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={creating || !projectName.trim()}
-              className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white text-sm font-extrabold shadow-xl shadow-emerald-600/30 hover:shadow-emerald-600/50 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2 hover:scale-102 active:scale-98"
-            >
-              {creating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Creating Project...</span>
-                </>
-              ) : (
-                <>
-                  <span>Create</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
+      {/* Loading State */}
+      {loading ? (
+        <div className="py-20 flex flex-col items-center justify-center text-center">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-3" />
+          <p className="text-sm font-semibold text-gray-700">Loading your workspace projects...</p>
         </div>
-
-        {/* Vector Rocket Illustration Graphic */}
-        <div className="w-full md:w-auto flex items-center justify-center flex-shrink-0 z-10">
-          <div className="w-72 h-56 relative flex items-center justify-center">
-            <svg
-              viewBox="0 0 300 240"
-              className="w-full h-full drop-shadow-2xl"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              {/* Tablet screen container */}
-              <rect x="70" y="20" width="160" height="200" rx="18" fill="#181d28" stroke="#ffffff1a" strokeWidth="2" />
-              <rect x="76" y="30" width="148" height="180" rx="12" fill="#0f141d" />
-              <rect x="135" y="215" width="30" height="3" rx="1.5" fill="#334155" />
-
-              {/* Smoke clouds */}
-              <circle cx="95" cy="180" r="18" fill="#10b981" opacity="0.3" />
-              <circle cx="120" cy="175" r="24" fill="#059669" opacity="0.4" />
-              <circle cx="150" cy="182" r="22" fill="#047857" opacity="0.5" />
-              <circle cx="180" cy="178" r="20" fill="#10b981" opacity="0.3" />
-
-              {/* Rocket Body */}
-              <path
-                d="M150 35 C133 60 128 95 128 130 L172 130 C172 95 167 60 150 35 Z"
-                fill="#ffffff"
-                stroke="#10b981"
-                strokeWidth="2.5"
-              />
-              {/* Rocket Nosecone */}
-              <path
-                d="M150 35 C142 50 137 68 135 78 L165 78 C163 68 158 50 150 35 Z"
-                fill="#10b981"
-              />
-              {/* Window */}
-              <circle cx="150" cy="95" r="11" fill="#064e3b" stroke="#10b981" strokeWidth="2.5" />
-              <circle cx="150" cy="95" r="6" fill="#a7f3d0" />
-
-              {/* Fins */}
-              <path d="M128 115 L110 135 L128 130 Z" fill="#10b981" />
-              <path d="M172 115 L190 135 L172 130 Z" fill="#10b981" />
-
-              {/* Flame Exhaust */}
-              <path d="M138 132 L150 165 L162 132 Z" fill="#f59e0b" />
-              <path d="M142 132 L150 152 L158 132 Z" fill="#fef08a" />
-
-              {/* Character interacting */}
-              <circle cx="215" cy="155" r="12" fill="#38bdf8" />
-              <path
-                d="M205 170 C205 164 210 160 225 160 C235 160 240 164 240 170 L242 195 L203 195 Z"
-                fill="#0284c7"
-              />
-              <path d="M210 175 L180 158" stroke="#38bdf8" strokeWidth="3.5" strokeLinecap="round" />
-            </svg>
+      ) : projects.length === 0 ? (
+        /* Empty State */
+        <div className="bg-white border border-gray-100 rounded-3xl p-10 text-center max-w-xl mx-auto shadow-xs">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 mx-auto mb-4">
+            <FolderKanban className="w-7 h-7" />
           </div>
-        </div>
-      </div>
-
-      {/* ─── Recent Projects Section ─── */}
-      <div className="space-y-4 pt-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <FolderKanban className="w-5 h-5 text-emerald-400" />
-            Recent Projects
+          <h2 className="text-xl font-bold text-gray-900 tracking-tight mb-2">
+            {activeTab === 'archived' ? 'No archived projects' : 'No projects yet'}
           </h2>
-          <span className="text-xs text-white/40">{projects.length} Total Projects</span>
+          <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+            {activeTab === 'archived'
+              ? 'Archived projects will be displayed here. You can archive projects from their settings.'
+              : 'Create your first project to start organizing your WhatsApp operations.'}
+          </p>
+          {activeTab === 'active' && (
+            <button
+              onClick={() => setShowModal(true)}
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition-all cursor-pointer"
+            >
+              <span>Create Project</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          )}
         </div>
+      ) : (
+        /* Project Cards Grid */
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredProjects.map((p) => {
+            const isArchived = (p.status || '').toUpperCase() === 'ARCHIVED';
 
-        {loading ? (
-          <div className="p-12 text-center text-white/40 bg-[#13151c] rounded-3xl border border-white/[0.08]">
-            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-400" />
-            <p className="text-xs font-medium">Loading your projects...</p>
-          </div>
-        ) : projects.length === 0 ? (
-          <div className="p-10 text-center bg-[#13151c] rounded-3xl border border-white/[0.08] text-white/50">
-            <p className="text-sm font-medium">No projects created yet. Use the form above to start!</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((project) => {
-              const isSelected = project.isActive;
-              const isSwitching = switchingId === project.id;
-
-              return (
-                <div
-                  key={project.id}
-                  className={`bg-[#13151c] rounded-3xl p-6 border transition-all flex flex-col justify-between group hover:shadow-2xl ${
-                    isSelected
-                      ? 'border-emerald-500 ring-2 ring-emerald-500/30 shadow-xl shadow-emerald-950/40 scale-101'
-                      : 'border-white/[0.08] hover:border-white/20 hover:bg-[#161822]'
-                  }`}
-                >
-                  <div>
-                    {/* Project Header */}
-                    <div className="flex items-start justify-between gap-2 mb-5">
-                      <div className="truncate">
-                        <h3 className="text-xl font-black text-white tracking-tight leading-tight truncate">
-                          {project.name}
-                        </h3>
-                        <span className="text-[10px] text-white/35 font-mono">
-                          ID: {project.id.slice(0, 8)}...
-                        </span>
-                      </div>
-                      {isSelected ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-medium text-white/40 bg-white/[0.04]">
-                          Standby
-                        </span>
-                      )}
+            return (
+              <div
+                key={p.id}
+                className="bg-white border border-gray-100 rounded-2xl p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 flex-shrink-0">
+                      <FolderKanban className="w-5 h-5" />
                     </div>
-
-                    {/* 2-Column Metadata Grid (Matching AiSensy design) */}
-                    <div className="grid grid-cols-2 gap-y-4 p-4 rounded-2xl bg-white/[0.02] border border-white/[0.04] text-xs mb-6">
-                      {/* Status */}
-                      <div>
-                        <span className="text-white/40 text-[11px] block font-medium">Status</span>
-                        <span className="font-semibold text-white capitalize">
-                          {project.status || 'Created'}
-                        </span>
-                      </div>
-
-                      {/* Active Plan */}
-                      <div>
-                        <span className="text-white/40 text-[11px] block font-medium">Active plan</span>
-                        <span className="font-black text-emerald-400 tracking-tight">
-                          {project.activePlan || 'FREE FOREVER'}
-                        </span>
-                      </div>
-
-                      {/* Connected Number */}
-                      <div className="col-span-2 pt-2 border-t border-white/[0.04]">
-                        <span className="text-white/40 text-[11px] block font-medium">Number</span>
-                        <span className="font-semibold text-white font-mono text-xs flex items-center gap-1.5 mt-0.5">
-                          <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                          {project.connectedNumber || 'N/A'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Created Date */}
-                    <div className="mb-6">
-                      <span className="text-[11px] text-white/40 font-medium">
-                        Created at {formatDate(project.createdAt)}
-                      </span>
-                    </div>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        isArchived
+                          ? 'bg-gray-100 text-gray-600 border border-gray-200'
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200/50'
+                      }`}
+                    >
+                      Status: {isArchived ? 'Archived' : 'Active'}
+                    </span>
                   </div>
 
-                  {/* View Button */}
-                  <button
-                    onClick={() => handleSelectProject(project.id)}
-                    disabled={isSwitching}
-                    className={`w-full py-3 px-4 rounded-2xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                      isSelected
-                        ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/30'
-                        : 'bg-white/[0.06] hover:bg-white/[0.12] text-white border border-white/10 active:scale-98'
-                    }`}
-                  >
-                    {isSwitching ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Entering Project...</span>
-                      </>
-                    ) : isSelected ? (
-                      <>
-                        <Check className="w-4 h-4 text-emerald-400" />
-                        <span>Current Active Project (View)</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>View Project</span>
-                        <ArrowRight className="w-4 h-4 text-white/40 group-hover:translate-x-1 transition-transform" />
-                      </>
-                    )}
-                  </button>
+                  <h3 className="text-base font-bold text-gray-900 truncate mb-1">
+                    {p.name}
+                  </h3>
+                  <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed min-h-[2.5rem]">
+                    {p.description || 'No description provided.'}
+                  </p>
+
+                  {/* Real Configuration States - No fake metrics */}
+                  <div className="mt-4 pt-3 border-t border-gray-50 space-y-1.5 text-xs text-gray-600">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-gray-500">
+                        <MessageSquare className="w-3.5 h-3.5 text-gray-400" />
+                        WhatsApp:
+                      </span>
+                      <span className="text-gray-500 text-[11px] font-medium">Not connected</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-gray-500">
+                        <Bot className="w-3.5 h-3.5 text-gray-400" />
+                        AI Agents:
+                      </span>
+                      <span className="text-gray-500 text-[11px] font-medium">Not configured</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-gray-500">
+                        <Users className="w-3.5 h-3.5 text-gray-400" />
+                        Contacts:
+                      </span>
+                      <span className="text-gray-500 text-[11px] font-medium">Not available yet</span>
+                    </div>
+                  </div>
                 </div>
-              );
-            })}
+
+                <div className="pt-4 mt-4 border-t border-gray-50 flex items-center justify-between">
+                  <span className="flex items-center gap-1 text-[11px] text-gray-400">
+                    <Calendar className="w-3.5 h-3.5" />
+                    {formatDate(p.createdAt)}
+                  </span>
+                  <Link
+                    href={`/projects/${p.id}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-bold transition-colors"
+                  >
+                    <span>Open</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Create Project Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100 relative">
+            <button
+              onClick={() => setShowModal(false)}
+              className="absolute top-5 right-5 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center">
+                <FolderKanban className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Create Project</h3>
+                <p className="text-xs text-gray-500">Set up a business operating context</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateProject} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Project name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Admissions"
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  autoFocus
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Description
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Handle student admission conversations"
+                  value={newProjectDesc}
+                  onChange={(e) => setNewProjectDesc(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating || !newProjectName.trim()}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  {creating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Creating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      <span>Create Project</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -27,8 +27,17 @@ export const auth0 = {
       } as any;
     }
 
-    // 2. If Auth0 is active and not bypassed, check Auth0 session
-    if (process.env.BYPASS_AUTH !== 'true' || process.env.NODE_ENV !== 'development') {
+    // In production, bypass is strictly prohibited and only authentic Auth0 session is allowed
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        return await _auth0.getSession();
+      } catch {
+        return null;
+      }
+    }
+
+    // 2. In non-production, check Auth0 session if bypass is not explicitly enabled
+    if (process.env.BYPASS_AUTH !== 'true') {
       try {
         return await _auth0.getSession();
       } catch {

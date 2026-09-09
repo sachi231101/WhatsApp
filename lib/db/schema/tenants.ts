@@ -14,6 +14,7 @@ export const tenants = pgTable('tenants', {
 
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
+  auth0UserId: varchar('auth0_user_id', { length: 255 }).unique(),
   auth0Sub: varchar('auth0_sub', { length: 255 }).unique(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   name: varchar('name', { length: 255 }),
@@ -26,17 +27,16 @@ export const users = pgTable('users', {
   status: varchar('status', { length: 50 }).default('active').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
 });
 
 export const workspaces = pgTable(
   'workspaces',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => tenants.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 255 }).notNull(),
-    slug: varchar('slug', { length: 100 }).notNull(),
+    slug: varchar('slug', { length: 100 }).notNull().unique(),
     timezone: varchar('timezone', { length: 50 }).default('UTC'),
     defaultLocale: varchar('default_locale', { length: 10 }).default('en_US'),
     status: varchar('status', { length: 50 }).default('active').notNull(),
@@ -44,7 +44,7 @@ export const workspaces = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('tenant_workspace_slug_idx').on(table.tenantId, table.slug),
+    uniqueIndex('workspace_slug_idx').on(table.slug),
     index('workspace_tenant_idx').on(table.tenantId),
   ],
 );
@@ -91,7 +91,7 @@ export const rolePermissions = pgTable(
 );
 
 export const workspaceMemberships = pgTable(
-  'workspace_memberships',
+  'workspace_members',
   {
     id: uuid('id').defaultRandom().primaryKey(),
     workspaceId: uuid('workspace_id')
@@ -100,8 +100,9 @@ export const workspaceMemberships = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    role: varchar('role', { length: 50 }).notNull().default('member'), // owner, admin, member, agent
+    role: varchar('role', { length: 50 }).notNull().default('VIEWER'), // OWNER, ADMIN, MANAGER, AGENT, VIEWER
     roleId: uuid('role_id').references(() => roles.id, { onDelete: 'restrict' }),
+    status: varchar('status', { length: 50 }).default('active').notNull(),
     invitationStatus: varchar('invitation_status', { length: 50 }).default('active').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

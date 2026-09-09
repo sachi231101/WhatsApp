@@ -78,47 +78,73 @@ export default function LivePhones({ phoneDisplay, phoneNumberId, wabaId }: Live
   }
 
   useEffect(() => {
-    const ablyClient = new Ably.Realtime({
-      authCallback: async (_, callback) => {
-        try {
-          const response = await fetch('/api/ably-auth');
-          const tokenRequest = await response.json();
-          callback(null, tokenRequest);
-        } catch (error) {
-          callback(error, null);
-        }
-      },
-    });
+    let ablyClient: Ably.Realtime | null = null;
+    let cancelled = false;
 
-    // Create a channel called 'get-started' and register a listener to subscribe to all messages with the name 'first'
-    const channel = ablyClient.channels.get('get-started');
-    channel.subscribe('first', (message) => {
-      const text = message.data.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body;
+    const setup = async () => {
+      try {
+        const response = await fetch('/api/ably-auth');
+        if (!response.ok || cancelled) return;
+        const data = await response.json();
+        if (!data || data.enabled === false || data.error || cancelled) return;
 
-      if (text) {
-        const destPhoneId = message.data.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
-        const consumerPhoneNumber = message.data.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
-        const displayName = message.data.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name;
-        if (destPhoneId === phoneNumberId) {
-          addWebhook(text);
-          addChat(consumerPhoneNumber, displayName);
-          addMessage(consumerPhoneNumber, '<< ' + text);
-        }
-      }
+        ablyClient = new Ably.Realtime({
+          authCallback: async (_, callback) => {
+            try {
+              const res = await fetch('/api/ably-auth');
+              if (!res.ok) {
+                callback({ message: `Ably auth unavailable (${res.status})`, statusCode: 403, code: 40101 } as any, null);
+                return;
+              }
+              const tokenRequest = await res.json();
+              if (tokenRequest.error || tokenRequest.enabled === false) {
+                callback({ message: tokenRequest.error || 'Ably disabled', statusCode: 403, code: 40101 } as any, null);
+                return;
+              }
+              callback(null, tokenRequest);
+            } catch (error) {
+              callback({ message: (error as Error)?.message || 'Ably auth error', statusCode: 403, code: 40101 } as any, null);
+            }
+          },
+        });
 
-      const echo = message.data.entry?.[0]?.changes?.[0]?.value?.message_echoes?.[0]?.text?.body;
-      const consumerPhoneNum = message.data.entry?.[0]?.changes?.[0]?.value?.message_echoes?.[0]?.to;
-      if (echo) {
-        addWebhook(text);
-        addMessage(consumerPhoneNum, '>> ' + echo + ' (echo)');
-      }
-    });
+        ablyClient.connection.on('failed', () => {});
+
+        const channel = ablyClient.channels.get('get-started');
+        channel.subscribe('first', (message: any) => {
+          const text = message.data.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body;
+
+          if (text) {
+            const destPhoneId = message.data.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
+            const consumerPhoneNumber = message.data.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
+            const displayName = message.data.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name;
+            if (destPhoneId === phoneNumberId) {
+              addWebhook(text);
+              addChat(consumerPhoneNumber, displayName);
+              addMessage(consumerPhoneNumber, '<< ' + text);
+            }
+          }
+
+          const echo = message.data.entry?.[0]?.changes?.[0]?.value?.message_echoes?.[0]?.text?.body;
+          const consumerPhoneNum = message.data.entry?.[0]?.changes?.[0]?.value?.message_echoes?.[0]?.to;
+          if (echo) {
+            addWebhook(text);
+            addMessage(consumerPhoneNum, '>> ' + echo + ' (echo)');
+          }
+        });
+      } catch {}
+    };
+
+    setup();
 
     return function cleanup() {
+      cancelled = true;
       setMessages({});
       setChats({});
       setWebhooks([]);
-      ablyClient.close();
+      try {
+        ablyClient?.close();
+      } catch {}
     };
   }, [phoneNumberId]);
 
