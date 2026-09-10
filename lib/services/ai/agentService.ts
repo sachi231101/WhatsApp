@@ -925,32 +925,49 @@ export class AgentService {
     delete (rawConfig as any).token;
     delete (rawConfig as any).password;
 
-    return {
+    const result: any = {
       id: r.id,
       agentId: r.agent_id,
+      agent_id: r.agent_id,
       workspaceId: r.workspace_id,
+      workspace_id: r.workspace_id,
       projectId: r.project_id,
+      project_id: r.project_id,
       versionNumber: r.version_number,
+      version_number: r.version_number,
       status: r.status,
       role: r.role,
       systemInstructions: r.system_instructions,
+      system_instructions: r.system_instructions,
       tone: r.tone,
       language: r.language,
       greetingMessage: r.greeting_message,
+      greeting_message: r.greeting_message,
       fallbackMessage: r.fallback_message,
+      fallback_message: r.fallback_message,
       responseBehavior: typeof r.response_behavior === 'object' ? r.response_behavior : {},
+      response_behavior: typeof r.response_behavior === 'object' ? r.response_behavior : {},
       escalationEnabled: Boolean(r.escalation_enabled),
+      escalation_enabled: Boolean(r.escalation_enabled),
       escalationMessage: r.escalation_message,
+      escalation_message: r.escalation_message,
       escalationConditions: Array.isArray(r.escalation_conditions) ? r.escalation_conditions : [],
+      escalation_conditions: Array.isArray(r.escalation_conditions) ? r.escalation_conditions : [],
       maxResponseLength: Number(r.max_response_length) || 300,
+      max_response_length: Number(r.max_response_length) || 300,
       temperature: Number(r.temperature) || 0.3,
       model: r.model || 'gpt-4o-mini',
       provider: r.provider || 'openai',
       configuration: rawConfig,
       createdBy: r.created_by,
+      created_by: r.created_by,
       createdAt: r.created_at,
+      created_at: r.created_at,
       publishedAt: r.published_at,
+      published_at: r.published_at,
     };
+
+    return result as AgentVersionRecord;
   }
 }
 

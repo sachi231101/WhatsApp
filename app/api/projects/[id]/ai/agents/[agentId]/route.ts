@@ -22,7 +22,15 @@ export async function GET(
 
     const agent = await agentService.getAgentById(workspace.id, projectId, agentId);
 
-    return NextResponse.json({ status: 'ok', data: agent });
+    return NextResponse.json({
+      status: 'ok',
+      data: {
+        ...agent,
+        agent,
+        draftVersion: agent.draftVersion,
+        currentVersion: agent.currentVersion,
+      },
+    });
   } catch (err: any) {
     if (err instanceof AuthenticationRequiredError) {
       return NextResponse.json({ status: 'error', error: 'Authentication required' }, { status: 401 });

@@ -165,6 +165,22 @@ export async function processWebhookJob(data: WebhookJobData): Promise<WebhookPr
               `;
               convId = newConvRows[0]?.id;
               conversationHandlingMode = newConvRows[0]?.handling_mode || 'AI_HANDLING';
+
+              // Publish Domain Event for conversation.created (Phase 10 Trigger Engine)
+              const { publishDomainEvent } = await import('@/lib/events/domainEvent');
+              await publishDomainEvent({
+                id: `conv-created-${convId}`,
+                type: 'conversation.created',
+                workspaceId,
+                projectId,
+                occurredAt: new Date().toISOString(),
+                payload: {
+                  conversationId: convId,
+                  contactId,
+                  channel: 'WHATSAPP',
+                },
+                metadata: { source: 'meta' },
+              });
             }
 
             // Insert Inbound Message
@@ -196,6 +212,36 @@ export async function processWebhookJob(data: WebhookJobData): Promise<WebhookPr
                 contact: contactCompat,
               },
             });
+
+            // Publish Domain Event for message.created (Phase 10 Trigger Engine)
+            if (insertedMsg?.id) {
+              const { publishDomainEvent } = await import('@/lib/events/domainEvent');
+              const isNewContact = Boolean(
+                (contact as any).isNew ||
+                (contact.createdAt && Date.now() - new Date(contact.createdAt).getTime() < 10000)
+              );
+              await publishDomainEvent({
+                id: `msg-${insertedMsg.id}`,
+                type: 'message.created',
+                workspaceId,
+                projectId,
+                occurredAt: new Date().toISOString(),
+                payload: {
+                  messageId: insertedMsg.id,
+                  metaMessageId: metaMsgId,
+                  conversationId: convId,
+                  contactId,
+                  phoneNumberId,
+                  phoneNumber: senderWaId,
+                  type: rawMsg.type || 'text',
+                  body: rawMsg.text?.body || preview,
+                  direction: 'inbound',
+                  senderType: 'customer',
+                  isNewContact,
+                },
+                metadata: { source: 'meta' },
+              });
+            }
 
             // Step 6: Record MESSAGE_RECEIVED activity for contact timeline
             await sql`

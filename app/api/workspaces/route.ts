@@ -73,7 +73,7 @@ export const GET = withAuth(async function listWorkspaces(_request: NextRequest,
 export const POST = withAuth(async function createWorkspace(request: NextRequest, session) {
   try {
     const body = await request.json();
-    const { name, slug, timezone, defaultLocale } = body;
+    const { name, slug, timezone, defaultLocale, projectName } = body;
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return NextResponse.json(
@@ -84,11 +84,13 @@ export const POST = withAuth(async function createWorkspace(request: NextRequest
 
     const cleanName = name.trim();
     const cleanSlug = typeof slug === 'string' && slug.trim() ? slug.trim() : undefined;
+    const cleanProjectName = typeof projectName === 'string' && projectName.trim() ? projectName.trim() : undefined;
 
     const workspace = await workspaceService.createWorkspace({
       tenantId: session.workspace.tenantId,
       name: cleanName,
       slug: cleanSlug,
+      projectName: cleanProjectName,
       timezone: typeof timezone === 'string' ? timezone.trim() : undefined,
       defaultLocale: typeof defaultLocale === 'string' ? defaultLocale.trim() : undefined,
       createdByUserId: session.workspace.userId,
@@ -105,6 +107,8 @@ export const POST = withAuth(async function createWorkspace(request: NextRequest
           activePlan: 'FREE FOREVER',
           connectedNumber: 'N/A',
           role: workspace.role,
+          defaultProjectId: workspace.defaultProjectId,
+          defaultProject: workspace.defaultProject,
           createdAt: workspace.createdAt,
           isActive: true,
         },
@@ -120,6 +124,16 @@ export const POST = withAuth(async function createWorkspace(request: NextRequest
       path: '/',
       maxAge: 60 * 60 * 24 * 30, // 30 days
     });
+
+    if (workspace.defaultProjectId) {
+      response.cookies.set('wazzapp_project_id', workspace.defaultProjectId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+      });
+    }
 
     return response;
   } catch (error) {

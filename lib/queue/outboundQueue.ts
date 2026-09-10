@@ -14,6 +14,11 @@ export interface OutboundJobData {
   mediaUrl?: string;
   replyToMetaId?: string;
   idempotencyKey?: string;
+  caption?: string;
+  templateName?: string;
+  templateParams?: Record<string, any> | any[];
+  phoneNumberId?: string;
+  metadata?: Record<string, any>;
 }
 
 // In-memory test harness

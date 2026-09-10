@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:all": "npm run test && npm run test:e2e"
+    "test:all": "npm run test && npm run test:e2e",
+    "worker:automation": "tsx workers/automation.worker.ts"
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "4.15.0",
@@ -20,6 +21,7 @@
     "@vercel/analytics": "1.5.0",
     "@vercel/postgres": "0.10.0",
     "@vercel/speed-insights": "1.2.0",
+    "@xyflow/react": "^12.11.6",
     "ably": "2.12.0",
     "axios": "^1.14.1",
     "bullmq": "^6.3.4",

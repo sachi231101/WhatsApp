@@ -43,6 +43,7 @@ A [Next.js](https://nextjs.org/) reference application that demonstrates how tec
 - **Webhook Viewer** — Debug tool showing all incoming webhook payloads
 - **Asset Management** — View shared Pages, Ad Accounts, Datasets, Catalogs, and Instagram Accounts
 - **Authentication** — Secure login via Auth0
+- **AI Agent Studio (Step 7)** — Multi-tenant autonomous agent configuration, draft lifecycle, immutable versioning, rollback, provider abstractions, and WhatsApp inbox integration ([Documentation](docs/step7-ai-agent-studio.md))
 
 ## Tech Stack
 

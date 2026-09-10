@@ -17,11 +17,18 @@ export interface SendOutboundMessageInput {
   workspaceId: string;
   projectId: string;
   conversationId: string;
-  userId: string;
+  userId?: string;
   content: string;
   type?: string;
   idempotencyKey?: string;
   replyToMessageId?: string;
+  senderType?: 'user' | 'ai_agent' | 'system' | 'automation';
+  caption?: string;
+  mediaUrl?: string;
+  templateName?: string;
+  templateParams?: Record<string, any> | any[];
+  metadata?: Record<string, any>;
+  phoneNumberId?: string;
 }
 
 export class InboxService {
@@ -240,6 +247,13 @@ export class InboxService {
       type = 'text',
       idempotencyKey,
       replyToMessageId,
+      senderType = 'user',
+      caption,
+      mediaUrl,
+      templateName,
+      templateParams,
+      metadata,
+      phoneNumberId,
     } = input;
 
     if (!content || !content.trim()) {
@@ -303,14 +317,17 @@ export class InboxService {
     const { rows: msgRows } = await sql`
       INSERT INTO messages (
         workspace_id, project_id, conversation_id, direction, sender_type,
-        sender_id, type, body, status, idempotency_key, reply_to_message_id, created_at
+        sender_id, type, body, caption, media_url, template_name, template_params,
+        metadata, status, idempotency_key, reply_to_message_id, created_at
       )
       VALUES (
-        ${workspaceId}, ${projectId}, ${conversationId}, 'outbound', 'user',
-        ${userId}, ${type}, ${content.trim()}, 'queued', ${idempotencyKey || null},
+        ${workspaceId}, ${projectId}, ${conversationId}, 'outbound', ${senderType},
+        ${userId || null}, ${type}, ${content.trim()}, ${caption || null}, ${mediaUrl || null},
+        ${templateName || null}, ${templateParams ? JSON.stringify(templateParams) : null},
+        ${JSON.stringify(metadata || {})}, 'queued', ${idempotencyKey || null},
         ${replyToMessageId || null}, CURRENT_TIMESTAMP
       )
-      RETURNING id, conversation_id, body, type, status, created_at
+      RETURNING id, conversation_id, body, caption, media_url, type, status, created_at
     `;
 
     const message = msgRows[0];
@@ -334,6 +351,12 @@ export class InboxService {
       destPhone: conv.phone_number || conv.wa_id,
       body: content.trim(),
       type,
+      caption,
+      mediaUrl,
+      templateName,
+      templateParams,
+      phoneNumberId,
+      metadata,
       idempotencyKey,
       replyToMetaId,
     });
@@ -347,7 +370,7 @@ export class InboxService {
         conversationId,
         message: {
           ...message,
-          sender_name: 'You',
+          sender_name: senderType === 'automation' ? 'Automation' : (senderType === 'ai_agent' ? 'AI Agent' : 'You'),
         },
       },
     });
@@ -356,6 +379,43 @@ export class InboxService {
       message,
       jobId,
       deduplicated: false,
+    };
+  }
+
+  /**
+   * Find an existing conversation for contact or create a new conversation record.
+   */
+  async findOrCreateConversation(workspaceId: string, projectId: string, contactId: string) {
+    await ensureCoreTables();
+    const { rows } = await sql`
+      SELECT id, window_expires_at, status
+      FROM conversations
+      WHERE workspace_id = ${workspaceId} AND project_id = ${projectId} AND contact_id = ${contactId}
+      ORDER BY last_message_at DESC NULLS LAST
+      LIMIT 1
+    `;
+    if (rows.length > 0) {
+      return {
+        id: rows[0].id,
+        windowExpiresAt: rows[0].window_expires_at,
+        status: rows[0].status,
+      };
+    }
+    const { rows: newRows } = await sql`
+      INSERT INTO conversations (
+        workspace_id, project_id, contact_id, status, handling_mode,
+        last_message_preview, last_message_at, unread_count
+      )
+      VALUES (
+        ${workspaceId}, ${projectId}, ${contactId}, 'open', 'AI_HANDLING',
+        '', CURRENT_TIMESTAMP, 0
+      )
+      RETURNING id, window_expires_at, status
+    `;
+    return {
+      id: newRows[0].id,
+      windowExpiresAt: newRows[0].window_expires_at,
+      status: newRows[0].status,
     };
   }
 

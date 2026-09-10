@@ -11,6 +11,8 @@ export interface WorkspaceRecord {
   defaultLocale: string;
   status: string;
   role?: WorkspaceRole;
+  defaultProjectId?: string;
+  defaultProject?: any;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,6 +23,8 @@ export interface CreateWorkspaceInput {
   slug?: string;
   timezone?: string;
   defaultLocale?: string;
+  projectName?: string;
+  projectSlug?: string;
   createdByUserId: string;
 }
 
@@ -153,6 +157,43 @@ export class WorkspaceService {
         // Ignored if workspace_memberships is aliased or does not exist
       }
 
+      // 3. Automatically create initial default project for this workspace
+      let defaultProject: any = null;
+      try {
+        const defaultProjectName = input.projectName?.trim() || 'Default Project';
+        const rawProjSlug = input.projectSlug?.trim() || 'default';
+        const projectDesc = `Default project for ${cleanName}`;
+
+        const { rows: projRows } = await sql`
+          INSERT INTO projects (
+            workspace_id,
+            name,
+            description,
+            slug,
+            status,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            ${workspace.id},
+            ${defaultProjectName},
+            ${projectDesc},
+            ${rawProjSlug},
+            'ACTIVE',
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+          )
+          RETURNING id, workspace_id, name, description, slug, status, created_at, updated_at
+        `;
+
+        if (projRows && projRows.length > 0) {
+          defaultProject = projRows[0];
+        }
+      } catch (projErr) {
+        // Log warning if projects table does not exist or in mock environments
+        console.warn('Notice: Default project auto-creation encountered:', projErr);
+      }
+
       await sql`COMMIT`;
 
       return {
@@ -164,6 +205,17 @@ export class WorkspaceService {
         defaultLocale: workspace.default_locale,
         status: workspace.status,
         role: WORKSPACE_ROLES.OWNER,
+        defaultProjectId: defaultProject?.id || undefined,
+        defaultProject: defaultProject ? {
+          id: defaultProject.id,
+          workspaceId: defaultProject.workspace_id,
+          name: defaultProject.name,
+          description: defaultProject.description,
+          slug: defaultProject.slug,
+          status: defaultProject.status,
+          createdAt: defaultProject.created_at,
+          updatedAt: defaultProject.updated_at,
+        } : undefined,
         createdAt: workspace.created_at,
         updatedAt: workspace.updated_at,
       };

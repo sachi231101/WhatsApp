@@ -81,17 +81,19 @@ export default function AgentPlaygroundPage() {
           throw new Error(json.error || 'Failed to load agent');
         }
 
-        setAgent(json.data.agent);
-        const version = json.data.draftVersion || json.data.currentVersion;
+        const agent = json.data?.agent || json.data;
+        setAgent(agent);
+        const version = json.data?.draftVersion || json.data?.currentVersion;
         setActiveVersion(version);
 
         // Preload greeting if available
-        if (version?.greeting_message) {
+        const greeting = version?.greeting_message || version?.greetingMessage;
+        if (greeting) {
           setMessages([
             {
               id: 'msg-greeting',
               role: 'assistant',
-              content: version.greeting_message,
+              content: greeting,
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             },
           ]);

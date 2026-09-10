@@ -159,10 +159,10 @@ export default function ClientSidebar() {
     .slice(0, 2)
     .toUpperCase() || 'W';
 
-  // Detect currently viewed project if path is /projects/[id]
+  // Detect currently viewed project if path is /projects/[id], fallback to first project
   const projectMatch = pathname.match(/^\/projects\/([a-zA-Z0-9_-]+)/);
   const currentProjectId = projectMatch ? projectMatch[1] : null;
-  const currentProject = projects.find((p) => p.id === currentProjectId);
+  const currentProject = projects.find((p) => p.id === currentProjectId) || (projects.length > 0 ? projects[0] : null);
 
   const handleSwitchWorkspace = async (workspaceId: string) => {
     try {
@@ -392,10 +392,10 @@ export default function ClientSidebar() {
             </div>
             <div className="flex-1 min-w-0 text-left">
               <p className="text-xs font-bold text-gray-800 truncate leading-tight">
-                {currentProject ? currentProject.name : projects.length > 0 ? 'All Projects' : 'No Projects'}
+                {currentProject ? currentProject.name : 'Default Project'}
               </p>
               <p className="text-[10px] text-gray-400 truncate leading-tight mt-0.5">
-                {projects.length} project{projects.length === 1 ? '' : 's'}
+                {projects.length > 0 ? `${projects.length} project${projects.length === 1 ? '' : 's'}` : 'Active Project'}
               </p>
             </div>
             <ChevronDown
@@ -427,7 +427,7 @@ export default function ClientSidebar() {
               {/* List of projects */}
               <div className="max-h-48 overflow-y-auto space-y-0.5">
                 {projects.map((p) => {
-                  const isSelected = p.id === currentProjectId;
+                  const isSelected = p.id === (currentProjectId || currentProject?.id);
 
                   return (
                     <Link

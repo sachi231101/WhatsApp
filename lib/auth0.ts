@@ -4,7 +4,6 @@
 // LICENSE file in the root directory of this source tree.
 
 import { Auth0Client } from '@auth0/nextjs-auth0/server';
-import { getSessionUser } from '@/lib/auth/session';
 
 const _auth0 = new Auth0Client();
 
@@ -12,19 +11,24 @@ export const auth0 = {
   ..._auth0,
   getSession: async () => {
     // 1. Prioritize encrypted session cookie (Admin or Client)
-    const customUser = await getSessionUser();
-    if (customUser) {
-      return {
-        user: {
-          email: customUser.email,
-          name: customUser.name,
-          sub: customUser.userId,
-          role: customUser.role,
-          isSuperAdmin: customUser.isSuperAdmin,
-          tenantId: customUser.tenantId,
-          workspaceId: customUser.workspaceId,
-        },
-      } as any;
+    try {
+      const { getSessionUser } = await import('@/lib/auth/session');
+      const customUser = await getSessionUser();
+      if (customUser) {
+        return {
+          user: {
+            email: customUser.email,
+            name: customUser.name,
+            sub: customUser.userId,
+            role: customUser.role,
+            isSuperAdmin: customUser.isSuperAdmin,
+            tenantId: customUser.tenantId,
+            workspaceId: customUser.workspaceId,
+          },
+        } as any;
+      }
+    } catch {
+      // getSessionUser not available in current environment
     }
 
     // In production, bypass is strictly prohibited and only authentic Auth0 session is allowed

@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, slug } = body;
+    const { name, slug, projectName } = body;
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return NextResponse.json(
@@ -31,11 +31,13 @@ export async function POST(request: NextRequest) {
 
     const cleanName = name.trim();
     const cleanSlug = typeof slug === 'string' && slug.trim() ? slug.trim() : undefined;
+    const cleanProjectName = typeof projectName === 'string' && projectName.trim() ? projectName.trim() : undefined;
 
-    // Transactional workspace creation + OWNER membership
+    // Transactional workspace creation + OWNER membership + default project
     const workspace = await workspaceService.createWorkspace({
       name: cleanName,
       slug: cleanSlug,
+      projectName: cleanProjectName,
       createdByUserId: user.id,
     });
 
@@ -55,6 +57,16 @@ export async function POST(request: NextRequest) {
       path: '/',
       maxAge: 60 * 60 * 24 * 30, // 30 days
     });
+
+    if (workspace.defaultProjectId) {
+      response.cookies.set('wazzapp_project_id', workspace.defaultProjectId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+      });
+    }
 
     return response;
   } catch (error: any) {

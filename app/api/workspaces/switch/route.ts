@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { requireWorkspaceMember, WorkspaceAccessDeniedError } from '@/lib/workspace/workspace-access';
+import { projectService } from '@/lib/services/tenants/projectService';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,12 +24,22 @@ export async function POST(request: NextRequest) {
     // Server-side authorization: verify user is an active member of target workspace
     const { workspace, membership } = await requireWorkspaceMember(workspaceId);
 
+    // Ensure the target workspace has an active project
+    let activeProjectId: string | undefined;
+    try {
+      const proj = await projectService.ensureDefaultProject(workspace.id);
+      activeProjectId = proj.id;
+    } catch {
+      // Ignored
+    }
+
     const response = NextResponse.json({
       status: 'ok',
       data: {
         workspaceId: workspace.id,
         workspaceName: workspace.name,
         role: membership.role,
+        projectId: activeProjectId,
       },
     });
 
@@ -40,6 +51,16 @@ export async function POST(request: NextRequest) {
       path: '/',
       maxAge: 30 * 24 * 60 * 60, // 30 days
     });
+
+    if (activeProjectId) {
+      response.cookies.set('wazzapp_project_id', activeProjectId, {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 30 * 24 * 60 * 60, // 30 days
+      });
+    }
 
     return response;
   } catch (error: any) {

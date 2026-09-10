@@ -17,9 +17,19 @@ export const GET = withAuth(async function listProjects(request: NextRequest, se
     const url = new URL(request.url);
     const statusParam = url.searchParams.get('status') || 'active';
 
-    const projects = await projectService.getWorkspaceProjects(workspaceId, {
+    let projects = await projectService.getWorkspaceProjects(workspaceId, {
       status: statusParam,
     });
+
+    // If an active workspace has no projects yet (e.g. newly created or legacy), auto-provision the default project
+    if (projects.length === 0 && (statusParam.toLowerCase() === 'active' || statusParam.toLowerCase() === 'all')) {
+      try {
+        const defaultProject = await projectService.ensureDefaultProject(workspaceId, 'Default Project');
+        projects = [defaultProject];
+      } catch (err) {
+        console.warn('Notice: Could not auto-provision default project in listProjects:', err);
+      }
+    }
 
     return NextResponse.json({
       status: 'ok',

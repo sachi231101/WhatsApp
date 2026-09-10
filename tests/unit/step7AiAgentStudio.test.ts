@@ -58,6 +58,7 @@ import { POST as duplicateAgentRoute } from '@/app/api/projects/[id]/ai/agents/[
 import { POST as rollbackAgentRoute } from '@/app/api/projects/[id]/ai/agents/[agentId]/rollback/route';
 import { POST as testAgentRoute } from '@/app/api/projects/[id]/ai/agents/[agentId]/test/route';
 import { GET as getVersionsRoute } from '@/app/api/projects/[id]/ai/agents/[agentId]/versions/route';
+import { POST as previewTestRoute } from '@/app/api/projects/[id]/ai/agents/preview-test/route';
 
 describe('STEP 7: AI Agent Studio', () => {
   // Test Identifiers
@@ -1305,4 +1306,138 @@ describe('STEP 7: AI Agent Studio', () => {
     expect(result.agents).toEqual([]);
     expect(result.totalCount).toBe(0);
   });
+
+  it('27. Preview test route executes against provider using draftOverride without creating agent record in DB', async () => {
+    OpenAIProvider.setTestMockHandler(async () => ({
+      content: 'Hello! I am your preview assistant.',
+      usage: { promptTokens: 15, completionTokens: 8, totalTokens: 23 },
+    }));
+
+    const authHandler = setupProjectAuth({
+      authorized: true,
+      projectId: projectAId,
+    });
+
+    let dbAgentInserted = false;
+    mockSql.mockImplementation(async (strings: any, ...values: any[]) => {
+      const q = typeof strings === 'string' ? strings : strings.join('?');
+      const auth = authHandler(q, values);
+      if (auth) return auth;
+      if (q.includes('INSERT INTO ai_agents')) {
+        dbAgentInserted = true;
+      }
+      return { rows: [] };
+    });
+
+    const req = new NextRequest(`http://localhost/api/projects/${projectAId}/ai/agents/preview-test`, {
+      method: 'POST',
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: 'Hi there' }],
+        draftOverride: {
+          role: 'Virtual Concierge',
+          systemInstructions: 'Be welcoming and brief.',
+          tone: 'Friendly',
+        },
+      }),
+    });
+
+    const res = await previewTestRoute(req, { params: Promise.resolve({ id: projectAId }) });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.status).toBe('ok');
+    expect(json.data.response).toBe('Hello! I am your preview assistant.');
+    expect(dbAgentInserted).toBe(false);
+  });
+
+  it('28. Agent playground test route accepts flexible payloads (conversationHistory & message)', async () => {
+    OpenAIProvider.setTestMockHandler(async () => ({
+      content: 'I can assist you with your booking.',
+      usage: { promptTokens: 18, completionTokens: 10, totalTokens: 28 },
+    }));
+
+    const authHandler = setupProjectAuth({
+      authorized: true,
+      projectId: projectAId,
+    });
+
+    mockSql.mockImplementation(async (strings: any, ...values: any[]) => {
+      const q = typeof strings === 'string' ? strings : strings.join('?');
+      const auth = authHandler(q, values);
+      if (auth) return auth;
+      if (q.includes('FROM ai_agents')) {
+        return {
+          rows: [
+            {
+              id: agentAId,
+              role: 'Booking Agent',
+              system_instructions: 'Assist with reservations',
+              current_version_id: version1Id,
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+
+    const req = new NextRequest(`http://localhost/api/projects/${projectAId}/ai/agents/${agentAId}/test`, {
+      method: 'POST',
+      body: JSON.stringify({
+        message: 'Can I book a slot?',
+        conversationHistory: [
+          { role: 'user', content: 'Can I book a slot?' },
+        ],
+      }),
+    });
+
+    const res = await testAgentRoute(req, {
+      params: Promise.resolve({ id: projectAId, agentId: agentAId }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.status).toBe('ok');
+    expect(json.data.response).toContain('booking');
+    expect(json.data.usage.totalTokens).toBe(28);
+  });
+
+  it('29. Unconfigured AI provider returns explicit error message rather than fake mock responses', async () => {
+    OpenAIProvider.setTestMockHandler(null);
+    const originalApiKey = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+
+    const authHandler = setupProjectAuth({
+      authorized: true,
+      projectId: projectAId,
+    });
+
+    mockSql.mockImplementation(async (strings: any, ...values: any[]) => {
+      const q = typeof strings === 'string' ? strings : strings.join('?');
+      const auth = authHandler(q, values);
+      if (auth) return auth;
+      return { rows: [] };
+    });
+
+    try {
+      const req = new NextRequest(`http://localhost/api/projects/${projectAId}/ai/agents/preview-test`, {
+        method: 'POST',
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: 'Hello' }],
+          draftOverride: {
+            role: 'Support Bot',
+            systemInstructions: 'Help politely',
+          },
+        }),
+      });
+
+      const res = await previewTestRoute(req, { params: Promise.resolve({ id: projectAId }) });
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe('AI provider is not configured.');
+    } finally {
+      if (originalApiKey) {
+        process.env.OPENAI_API_KEY = originalApiKey;
+      }
+    }
+  });
 });
+

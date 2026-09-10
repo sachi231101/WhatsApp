@@ -177,16 +177,22 @@ export const knowledgeBases = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .references(() => projects.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 255 }).notNull(),
     description: text('description'),
     embeddingModel: varchar('embedding_model', { length: 100 }).default('text-embedding-3-small').notNull(),
     embeddingDimension: integer('embedding_dimension').default(1536).notNull(),
-    status: varchar('status', { length: 50 }).default('active').notNull(),
+    status: varchar('status', { length: 50 }).default('ACTIVE').notNull(), // ACTIVE, ARCHIVED
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
   },
   (table) => [
     index('kb_ws_idx').on(table.workspaceId),
+    index('kb_proj_idx').on(table.projectId),
+    index('kb_status_idx').on(table.status),
   ],
 );
 
@@ -197,44 +203,63 @@ export const knowledgeSources = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .references(() => projects.id, { onDelete: 'cascade' }),
     knowledgeBaseId: uuid('knowledge_base_id')
       .notNull()
       .references(() => knowledgeBases.id, { onDelete: 'cascade' }),
-    type: varchar('type', { length: 50 }).notNull(), // file, website_crawl, text_snippet, notion, api
-    uri: text('uri'),
-    syncFrequency: varchar('sync_frequency', { length: 50 }).default('manual'),
-    lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
-    status: varchar('status', { length: 50 }).default('ready').notNull(),
+    type: varchar('type', { length: 50 }).notNull(), // PDF, DOCX, TXT, CSV, URL, FAQ, TEXT
+    name: varchar('name', { length: 255 }).notNull(),
+    sourceUrl: text('source_url'),
+    mimeType: varchar('mime_type', { length: 100 }),
+    storageKey: text('storage_key'),
+    checksum: varchar('checksum', { length: 64 }),
+    status: varchar('status', { length: 50 }).default('PENDING').notNull(), // PENDING, PROCESSING, READY, FAILED, ARCHIVED
+    errorMessage: text('error_message'),
+    metadata: jsonb('metadata').default({}).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
   },
   (table) => [
     index('kb_sources_ws_kb_idx').on(table.workspaceId, table.knowledgeBaseId),
+    index('kb_sources_proj_idx').on(table.projectId),
+    index('kb_sources_status_idx').on(table.status),
   ],
 );
 
-export const documents = pgTable(
-  'documents',
+export const knowledgeDocuments = pgTable(
+  'knowledge_documents',
   {
     id: uuid('id').defaultRandom().primaryKey(),
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .references(() => projects.id, { onDelete: 'cascade' }),
     knowledgeSourceId: uuid('knowledge_source_id')
       .notNull()
       .references(() => knowledgeSources.id, { onDelete: 'cascade' }),
     title: varchar('title', { length: 255 }).notNull(),
-    rawContent: text('raw_content').notNull(),
-    contentHash: varchar('content_hash', { length: 64 }).notNull(),
-    metaData: jsonb('meta_data').default({}).notNull(),
-    totalTokens: integer('total_tokens').default(0).notNull(),
-    status: varchar('status', { length: 50 }).default('processed').notNull(),
+    content: text('content').notNull(),
+    language: varchar('language', { length: 50 }).default('en'),
+    characterCount: integer('character_count').default(0).notNull(),
+    tokenCount: integer('token_count').default(0).notNull(),
+    version: integer('version').default(1).notNull(),
+    checksum: varchar('checksum', { length: 64 }),
+    status: varchar('status', { length: 50 }).default('READY').notNull(), // READY, PENDING, FAILED
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('documents_source_idx').on(table.knowledgeSourceId),
-    index('documents_ws_idx').on(table.workspaceId),
+    index('kb_docs_source_idx').on(table.knowledgeSourceId),
+    index('kb_docs_ws_idx').on(table.workspaceId),
+    index('kb_docs_proj_idx').on(table.projectId),
   ],
 );
+
+// Backward-compatible alias
+export const documents = knowledgeDocuments;
 
 export const knowledgeChunks = pgTable(
   'knowledge_chunks',
@@ -243,17 +268,19 @@ export const knowledgeChunks = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
-    documentId: uuid('document_id')
-      .notNull()
-      .references(() => documents.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    knowledgeDocumentId: uuid('knowledge_document_id')
+      .references(() => knowledgeDocuments.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id'), // Backward-compatible legacy column
     chunkIndex: integer('chunk_index').notNull(),
     content: text('content').notNull(),
     tokenCount: integer('token_count').notNull(),
-    metaData: jsonb('meta_data').default({}).notNull(),
+    metadata: jsonb('metadata').default({}).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('chunks_doc_idx').on(table.documentId),
-    index('chunks_ws_idx').on(table.workspaceId),
+    index('chunks_doc_idx').on(table.knowledgeDocumentId),
+    index('chunks_ws_proj_idx').on(table.workspaceId, table.projectId),
   ],
 );

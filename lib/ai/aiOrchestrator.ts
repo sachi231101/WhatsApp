@@ -11,12 +11,20 @@ export interface AIOrchestratorResult {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    inputTokens?: number;
+    outputTokens?: number;
   };
   provider: string;
   model: string;
   latencyMs: number;
   agentId?: string;
   versionNumber?: number;
+  sources?: Array<{
+    sourceId: string;
+    documentId: string;
+    title: string;
+    score: number;
+  }>;
 }
 
 export interface OrchestratorInput {
@@ -225,7 +233,7 @@ export class AIOrchestrator {
       maxRecentMessages: 10,
     });
 
-    const knowledgeSnippet = await ConversationContextBuilder.retrieveRelevantKnowledge(
+    const knowledgeResult = await ConversationContextBuilder.retrieveKnowledgeWithCitations(
       lastUserMessage,
       agent.agent_id,
       workspaceId,
@@ -239,7 +247,7 @@ export class AIOrchestrator {
       language: agent.language,
       customerName: context.contactDetails?.name,
       customerCompany: context.contactDetails?.company,
-      knowledgeContext: knowledgeSnippet,
+      knowledgeContext: knowledgeResult.knowledgeSnippet,
       maxResponseLength: agent.max_response_length || 300,
     });
 
@@ -283,6 +291,7 @@ export class AIOrchestrator {
         latencyMs: completion.latencyMs,
         agentId: agent.agent_id,
         versionNumber: agent.version_number,
+        sources: knowledgeResult.sources,
       };
     } catch (providerErr: any) {
       console.error('[AIOrchestrator] Provider execution error:', providerErr);
@@ -313,6 +322,7 @@ export class AIOrchestrator {
           latencyMs,
           agentId: agent.agent_id,
           versionNumber: agent.version_number,
+          sources: knowledgeResult.sources,
         };
       }
 
@@ -325,6 +335,7 @@ export class AIOrchestrator {
         latencyMs,
         agentId: agent.agent_id,
         versionNumber: agent.version_number,
+        sources: knowledgeResult.sources,
       };
     }
   }
@@ -336,42 +347,48 @@ export class AIOrchestrator {
     const { workspaceId, projectId, agentId, draftOverride } = input;
     const startTime = Date.now();
 
-    // 1. Fetch agent and current draft/published version
-    const { rows: agentRows } = await sql`
-      SELECT 
-        a.id, a.name, a.status, a.current_version_id,
-        v.role, v.system_instructions, v.tone, v.language,
-        v.greeting_message, v.fallback_message, v.escalation_enabled,
-        v.escalation_message, v.escalation_conditions, v.max_response_length,
-        v.temperature, v.model, v.provider
-      FROM ai_agents a
-      LEFT JOIN ai_agent_versions v ON (
-        v.agent_id = a.id AND (v.id = a.current_version_id OR v.status = 'DRAFT')
-      )
-      WHERE a.id = ${agentId}
-        AND a.workspace_id = ${workspaceId}
-        AND a.project_id = ${projectId}
-      ORDER BY v.version_number DESC
-      LIMIT 1
-    `;
+    // 1. Fetch agent and current draft/published version if agentId is provided
+    let row: any = null;
+    if (agentId && agentId !== 'preview') {
+      const { rows: agentRows } = await sql`
+        SELECT 
+          a.id, a.name, a.status, a.current_version_id,
+          v.role, v.system_instructions, v.tone, v.language,
+          v.greeting_message, v.fallback_message, v.escalation_enabled,
+          v.escalation_message, v.escalation_conditions, v.max_response_length,
+          v.temperature, v.model, v.provider
+        FROM ai_agents a
+        LEFT JOIN ai_agent_versions v ON (
+          v.agent_id = a.id AND (v.id = a.current_version_id OR v.status = 'DRAFT')
+        )
+        WHERE a.id = ${agentId}
+          AND a.workspace_id = ${workspaceId}
+          AND a.project_id = ${projectId}
+        ORDER BY v.version_number DESC
+        LIMIT 1
+      `;
 
-    if (agentRows.length === 0) {
-      throw new Error('Agent not found or access denied');
+      if (agentRows.length === 0) {
+        if (!draftOverride) {
+          throw new Error('Agent not found or access denied');
+        }
+      } else {
+        row = agentRows[0];
+      }
     }
 
-    const row = agentRows[0];
-    const role = draftOverride?.role || row.role || 'Assistant';
-    const systemInstructions = draftOverride?.systemInstructions || row.system_instructions || 'Answer helpful customer questions.';
-    const tone = draftOverride?.tone || row.tone || 'Professional';
-    const language = draftOverride?.language || row.language || 'English';
-    const fallbackMessage = draftOverride?.fallbackMessage || row.fallback_message || "I'm sorry, I cannot process that request right now.";
-    const escalationEnabled = draftOverride?.escalationEnabled !== undefined ? draftOverride.escalationEnabled : (row.escalation_enabled ?? true);
-    const escalationMessage = draftOverride?.escalationMessage || row.escalation_message || 'Connecting you to a human agent.';
-    const escalationConditions = draftOverride?.escalationConditions || row.escalation_conditions || [];
-    const maxTokens = draftOverride?.maxResponseLength || row.max_response_length || 300;
-    const temperature = draftOverride?.temperature !== undefined ? Number(draftOverride.temperature) : Number(row.temperature || 0.3);
-    const model = draftOverride?.model || row.model || 'gpt-4o-mini';
-    const providerName = draftOverride?.provider || row.provider || 'openai';
+    const role = draftOverride?.role || row?.role || 'Assistant';
+    const systemInstructions = draftOverride?.systemInstructions || row?.system_instructions || 'Answer helpful customer questions.';
+    const tone = draftOverride?.tone || row?.tone || 'Professional';
+    const language = draftOverride?.language || row?.language || 'English';
+    const fallbackMessage = draftOverride?.fallbackMessage || row?.fallback_message || "I'm sorry, I cannot process that request right now.";
+    const escalationEnabled = draftOverride?.escalationEnabled !== undefined ? draftOverride.escalationEnabled : (row?.escalation_enabled ?? true);
+    const escalationMessage = draftOverride?.escalationMessage || row?.escalation_message || 'Connecting you to a human agent.';
+    const escalationConditions = draftOverride?.escalationConditions || row?.escalation_conditions || [];
+    const maxTokens = draftOverride?.maxResponseLength || row?.max_response_length || 300;
+    const temperature = draftOverride?.temperature !== undefined ? Number(draftOverride.temperature) : Number(row?.temperature || 0.3);
+    const model = draftOverride?.model || row?.model || 'gpt-4o-mini';
+    const providerName = draftOverride?.provider || row?.provider || 'openai';
 
     const inputMessages = input.messages || (input.message ? [{ role: 'user' as const, content: input.message }] : []);
     const lastUserMsg = [...inputMessages].reverse().find((m) => m.role === 'user')?.content || '';
@@ -384,7 +401,7 @@ export class AIOrchestrator {
           response: escalationMessage,
           shouldEscalate: true,
           escalationReason: esc.reason,
-          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, inputTokens: 0, outputTokens: 0 },
           provider: providerName,
           model,
           latencyMs: Date.now() - startTime,
@@ -393,11 +410,25 @@ export class AIOrchestrator {
       }
     }
 
+    let knowledgeSnippet = '';
+    let testSources: any[] = [];
+    if (agentId && agentId !== 'preview' && lastUserMsg) {
+      const kRes = await ConversationContextBuilder.retrieveKnowledgeWithCitations(
+        lastUserMsg,
+        agentId,
+        workspaceId,
+        projectId,
+      );
+      knowledgeSnippet = kRes.knowledgeSnippet;
+      testSources = kRes.sources;
+    }
+
     const systemPrompt = this.formatSystemPrompt({
       role,
       systemInstructions,
       tone,
       language,
+      knowledgeContext: knowledgeSnippet,
       maxResponseLength: maxTokens,
     });
 
@@ -412,37 +443,52 @@ export class AIOrchestrator {
         maxTokens,
       });
 
-      // Record usage in ai_usage
-      await sql`
-        INSERT INTO ai_usage (
-          workspace_id, project_id, agent_id, agent_version_id, conversation_id,
-          provider, model, input_tokens, output_tokens, total_tokens,
-          latency_ms, status
-        )
-        VALUES (
-          ${workspaceId}, ${projectId}, ${agentId}, ${row.current_version_id || null}, NULL,
-          ${completion.provider || providerName}, ${completion.model || model},
-          ${completion.usage?.promptTokens || 0}, ${completion.usage?.completionTokens || 0}, ${completion.usage?.totalTokens || 0},
-          ${completion.latencyMs || Date.now() - startTime}, ${'SUCCESS'}
-        )
-      `.catch((): null => null);
+      const enrichedUsage = {
+        promptTokens: completion.usage?.promptTokens || 0,
+        completionTokens: completion.usage?.completionTokens || 0,
+        totalTokens: completion.usage?.totalTokens || 0,
+        inputTokens: completion.usage?.promptTokens || 0,
+        outputTokens: completion.usage?.completionTokens || 0,
+      };
+
+      // Record usage in ai_usage if real agent is being tested
+      if (agentId && agentId !== 'preview' && row) {
+        await sql`
+          INSERT INTO ai_usage (
+            workspace_id, project_id, agent_id, agent_version_id, conversation_id,
+            provider, model, input_tokens, output_tokens, total_tokens,
+            latency_ms, status
+          )
+          VALUES (
+            ${workspaceId}, ${projectId}, ${agentId}, ${row.current_version_id || null}, NULL,
+            ${completion.provider || providerName}, ${completion.model || model},
+            ${enrichedUsage.promptTokens}, ${enrichedUsage.completionTokens}, ${enrichedUsage.totalTokens},
+            ${completion.latencyMs || Date.now() - startTime}, ${'SUCCESS'}
+          )
+        `.catch((): null => null);
+      }
 
       return {
         response: completion.content || fallbackMessage,
         shouldEscalate: false,
-        usage: completion.usage,
+        usage: enrichedUsage,
         provider: completion.provider,
         model: completion.model,
         latencyMs: completion.latencyMs,
         agentId,
+        sources: testSources,
       };
     } catch (err: any) {
+      if (err?.message === 'AI provider is not configured.') {
+        throw err;
+      }
+
       if (escalationEnabled) {
         return {
           response: escalationMessage,
           shouldEscalate: true,
           escalationReason: `Provider error: ${err?.message}`,
-          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, inputTokens: 0, outputTokens: 0 },
           provider: providerName,
           model,
           latencyMs: Date.now() - startTime,
@@ -452,7 +498,7 @@ export class AIOrchestrator {
       return {
         response: fallbackMessage,
         shouldEscalate: false,
-        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, inputTokens: 0, outputTokens: 0 },
         provider: providerName,
         model,
         latencyMs: Date.now() - startTime,

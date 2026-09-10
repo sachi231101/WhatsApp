@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Ably from 'ably';
 import {
   Search,
@@ -118,6 +119,7 @@ const StatusBadge = ({ status }: { status: string }) => {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function TeamInboxPage() {
+  const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -133,6 +135,25 @@ export default function TeamInboxPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedConv = conversations.find((c) => c.id === selectedId);
+
+  // Auto-redirect to project inbox if active project exists
+  useEffect(() => {
+    async function resolveProject() {
+      try {
+        const res = await fetch('/api/projects?status=active');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.status === 'ok' && Array.isArray(json.data) && json.data.length > 0) {
+            router.replace(`/projects/${json.data[0].id}/inbox`);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to resolve project for inbox:', err);
+      }
+    }
+    resolveProject();
+  }, [router]);
 
   // ── Fetch Conversations ──────────────────────────────────────────────────────
   const fetchConversations = useCallback(async () => {

@@ -94,16 +94,17 @@ export default function NewAgentWizardPage() {
         const json = await res.json();
         setTestMessages([...newHistory, { role: 'assistant', content: json.data?.response || fallbackMessage }]);
       } else {
+        const errJson = await res.json().catch(() => ({}));
         setTestMessages([
           ...newHistory,
           {
             role: 'assistant',
-            content: `[Preview Mode]: Verified response for "${userMsg}". Real AI replies will connect once saved.`,
+            content: errJson?.error || 'AI provider is not configured.',
           },
         ]);
       }
     } catch {
-      setTestMessages([...newHistory, { role: 'assistant', content: fallbackMessage }]);
+      setTestMessages([...newHistory, { role: 'assistant', content: 'AI provider is not configured.' }]);
     } finally {
       setTestLoading(false);
     }

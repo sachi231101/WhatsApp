@@ -82,6 +82,21 @@ export async function POST(request: NextRequest) {
       VALUES (${workspace.id}, ${user.id}, ${WORKSPACE_ROLES.OWNER}, 'active')
     `;
 
+    // 4b. Provision Default Project
+    let defaultProjectId = '';
+    try {
+      const { rows: projRows } = await sql`
+        INSERT INTO projects (workspace_id, name, description, slug, status)
+        VALUES (${workspace.id}, 'Default Project', 'Initial default project', 'default', 'ACTIVE')
+        RETURNING id
+      `;
+      if (projRows && projRows.length > 0) {
+        defaultProjectId = projRows[0].id;
+      }
+    } catch (projErr) {
+      console.warn('Notice: Could not provision default project during client registration:', projErr);
+    }
+
     // 5. Generate session token & cookie
     const token = createSessionToken({
       userId: user.id,
@@ -111,6 +126,12 @@ export async function POST(request: NextRequest) {
       path: '/',
       sameSite: 'lax',
     });
+    if (defaultProjectId) {
+      response.cookies.set('wazzapp_project_id', defaultProjectId, {
+        path: '/',
+        sameSite: 'lax',
+      });
+    }
 
     return response;
   } catch (error: any) {

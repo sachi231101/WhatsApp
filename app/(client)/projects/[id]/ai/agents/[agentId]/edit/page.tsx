@@ -68,28 +68,31 @@ export default function EditAgentDraftPage() {
           throw new Error(json.error || 'Failed to load agent');
         }
 
-        const agent = json.data.agent;
-        const draft = json.data.draftVersion || json.data.currentVersion;
+        const agent = json.data?.agent || json.data;
+        const draft = json.data?.draftVersion || json.data?.currentVersion;
 
-        setName(agent.name || '');
-        setDescription(agent.description || '');
-        setHandlingMode(agent.handling_mode || 'AI_HANDLING');
+        if (agent) {
+          setName(agent.name || '');
+          setDescription(agent.description || '');
+          setHandlingMode(agent.handling_mode || agent.handlingMode || 'AI_HANDLING');
+        }
 
         if (draft) {
           setRole(draft.role || '');
-          setSystemInstructions(draft.system_instructions || '');
+          setSystemInstructions(draft.system_instructions || draft.systemInstructions || '');
           setTone(draft.tone || 'Professional');
           setLanguage(draft.language || 'English');
           setProvider(draft.provider || 'openai');
           setModel(draft.model || 'gpt-4o-mini');
-          setGreetingMessage(draft.greeting_message || '');
-          setFallbackMessage(draft.fallback_message || '');
-          setMaxResponseLength(draft.max_response_length || 250);
+          setGreetingMessage(draft.greeting_message || draft.greetingMessage || '');
+          setFallbackMessage(draft.fallback_message || draft.fallbackMessage || '');
+          setMaxResponseLength(draft.max_response_length || draft.maxResponseLength || 250);
           setTemperature(Number(draft.temperature) || 0.3);
-          setEscalationEnabled(draft.escalation_enabled ?? true);
-          setEscalationMessage(draft.escalation_message || '');
+          setEscalationEnabled(draft.escalation_enabled ?? draft.escalationEnabled ?? true);
+          setEscalationMessage(draft.escalation_message || draft.escalationMessage || '');
 
-          const conds = Array.isArray(draft.escalation_conditions) ? draft.escalation_conditions.join(', ') : '';
+          const rawConds = draft.escalation_conditions || draft.escalationConditions;
+          const conds = Array.isArray(rawConds) ? rawConds.join(', ') : '';
           setEscalationKeywords(conds);
         }
       } catch (err: unknown) {

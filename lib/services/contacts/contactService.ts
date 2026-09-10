@@ -34,6 +34,7 @@ export interface ContactRecord {
   tags?: Array<{ id: string; name: string; color: string }>;
   primaryPhone?: string;
   primaryEmail?: string;
+  isNew?: boolean;
 }
 
 export interface GetContactsOptions {
@@ -463,6 +464,23 @@ export class ContactService {
       },
     });
 
+    // Publish Domain Event (Phase 10 Trigger Engine)
+    const { publishDomainEvent } = await import('@/lib/events/domainEvent');
+    await publishDomainEvent({
+      id: `contact-created-${newContact.id}`,
+      type: 'contact.created',
+      workspaceId,
+      projectId,
+      occurredAt: new Date().toISOString(),
+      payload: {
+        contactId: newContact.id,
+        source,
+        displayName: computedDisplayName,
+        phoneNumber: normalizedPhone,
+      },
+      metadata: { source: actorName || 'user', actorId },
+    });
+
     return {
       id: newContact.id,
       workspaceId: newContact.workspace_id,
@@ -761,6 +779,7 @@ export class ContactService {
         lastActivityAt: new Date().toISOString(),
         createdAt: existing.created_at,
         updatedAt: existing.updated_at,
+        isNew: false,
       };
     }
 
@@ -819,6 +838,23 @@ export class ContactService {
       },
     });
 
+    // Publish Domain Event for contact.created (Phase 10 Trigger Engine)
+    const { publishDomainEvent } = await import('@/lib/events/domainEvent');
+    await publishDomainEvent({
+      id: `contact-created-${created.id}`,
+      type: 'contact.created',
+      workspaceId,
+      projectId,
+      occurredAt: new Date().toISOString(),
+      payload: {
+        contactId: created.id,
+        source: 'WHATSAPP',
+        displayName: fallbackName,
+        phoneNumber: normalized,
+      },
+      metadata: { source: 'meta' },
+    });
+
     return {
       id: created.id,
       workspaceId: created.workspace_id,
@@ -838,6 +874,7 @@ export class ContactService {
       lastActivityAt: created.last_activity_at,
       createdAt: created.created_at,
       updatedAt: created.updated_at,
+      isNew: true,
     };
   }
 

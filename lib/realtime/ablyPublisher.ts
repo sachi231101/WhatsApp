@@ -27,6 +27,12 @@ export function clearTestAiRealtimeEvents(): void {
   testAiRealtimeEvents.length = 0;
 }
 
+export const testAutomationRealtimeEvents: InboxRealtimeEvent[] = [];
+
+export function clearTestAutomationRealtimeEvents(): void {
+  testAutomationRealtimeEvents.length = 0;
+}
+
 let ablyClient: Ably.Realtime | null = null;
 
 function getAblyKey(): string | undefined {
@@ -176,6 +182,43 @@ export async function publishAiEvent(params: {
     return true;
   } catch (err) {
     console.warn(`[AblyPublisher] Error publishing AI event to ${channelName}:`, err);
+    return false;
+  }
+}
+
+/**
+ * Publishes an event to the tenant and project-scoped automations channel:
+ * `workspace:${workspaceId}:project:${projectId}:automations`
+ */
+export async function publishAutomationEvent(params: {
+  workspaceId: string;
+  projectId: string;
+  event: string;
+  data: any;
+}): Promise<boolean> {
+  const { workspaceId, projectId, event, data } = params;
+  const channelName = `workspace:${workspaceId}:project:${projectId}:automations`;
+
+  // Always record to in-memory test recorder
+  testAutomationRealtimeEvents.push({
+    channel: channelName,
+    name: event,
+    event,
+    data,
+    timestamp: new Date().toISOString(),
+  });
+
+  const ably = getAblyInstance();
+  if (!ably) {
+    return true; // Graceful offline/test fallback
+  }
+
+  try {
+    const channel = ably.channels.get(channelName);
+    await channel.publish(event, data);
+    return true;
+  } catch (err) {
+    console.warn(`[AblyPublisher] Error publishing automation event to ${channelName}:`, err);
     return false;
   }
 }

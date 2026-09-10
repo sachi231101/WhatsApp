@@ -32,6 +32,10 @@ export async function processOutboundJob(data: OutboundJobData): Promise<Outboun
     body,
     type = 'text',
     replyToMetaId,
+    mediaUrl,
+    caption,
+    templateName,
+    templateParams,
   } = data;
 
   try {
@@ -74,15 +78,39 @@ export async function processOutboundJob(data: OutboundJobData): Promise<Outboun
     if (isMockMode()) {
       metaMessageId = `wamid.MOCK_OUTBOUND_${Date.now()}`;
     } else {
+      const normalizedType = (type || 'text').toLowerCase();
+      const isMedia = ['image', 'video', 'audio', 'document'].includes(normalizedType);
+
       const payload: Record<string, unknown> = {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
         to: destPhone.replace(/[^0-9]/g, ''),
-        type: type === 'template' ? 'template' : 'text',
+        type: normalizedType === 'template' ? 'template' : (isMedia ? normalizedType : 'text'),
       };
 
-      if (type === 'template') {
-        payload.template = { name: body, language: { code: 'en_US' } };
+      if (normalizedType === 'template') {
+        const tplName = templateName || body;
+        payload.template = {
+          name: tplName,
+          language: { code: 'en_US' },
+          ...(templateParams && Array.isArray(templateParams) && templateParams.length > 0
+            ? {
+                components: [
+                  {
+                    type: 'body',
+                    parameters: templateParams.map((p) =>
+                      typeof p === 'object' ? p : { type: 'text', text: String(p) }
+                    ),
+                  },
+                ],
+              }
+            : {}),
+        };
+      } else if (isMedia) {
+        payload[normalizedType] = {
+          link: mediaUrl || body,
+          ...(caption ? { caption } : {}),
+        };
       } else {
         payload.text = { body };
       }

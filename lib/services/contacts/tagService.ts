@@ -113,11 +113,12 @@ export class TagService {
     }
     const tag = tagRows[0];
 
-    // Associate
-    await sql`
+    // Associate (returns row only if newly inserted)
+    const { rows: tagInsertRows } = await sql`
       INSERT INTO contact_tags (workspace_id, project_id, contact_id, tag_id)
       VALUES (${workspaceId}, ${projectId}, ${contactId}, ${tagId})
       ON CONFLICT (contact_id, tag_id) DO NOTHING
+      RETURNING contact_id;
     `;
 
     // Record activity
@@ -139,6 +140,25 @@ export class TagService {
       event: 'contact.tag.updated',
       data: { contactId, action: 'added', tagId: tag.id, tagName: tag.name },
     });
+
+    // Publish Domain Event for contact.tag_added (Phase 10 Trigger Engine)
+    // Only fires if the tag was genuinely newly added, not if already attached
+    if (tagInsertRows && tagInsertRows.length > 0) {
+      const { publishDomainEvent } = await import('@/lib/events/domainEvent');
+      await publishDomainEvent({
+        id: `tag-added-${contactId}-${tagId}-${Date.now()}`,
+        type: 'contact.tag_added',
+        workspaceId,
+        projectId,
+        occurredAt: new Date().toISOString(),
+        payload: {
+          contactId,
+          tagId: tag.id,
+          tagName: tag.name,
+        },
+        metadata: { source: actorName || 'user', actorId },
+      });
+    }
 
     return true;
   }

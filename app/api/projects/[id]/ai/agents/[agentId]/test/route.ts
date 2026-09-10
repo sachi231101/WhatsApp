@@ -22,7 +22,11 @@ export async function POST(
     const { workspace } = await requireProjectAccess(projectId, WORKSPACE_ROLES.MEMBER, user.id);
 
     const body = await request.json();
-    const messages = Array.isArray(body.messages) ? body.messages : [];
+    const rawMessages =
+      body.messages ||
+      body.conversationHistory ||
+      (body.message ? [{ role: 'user', content: body.message }] : []);
+    const messages = Array.isArray(rawMessages) ? rawMessages : [];
     const draftOverride = body.draftOverride && typeof body.draftOverride === 'object' ? body.draftOverride : undefined;
 
     if (messages.length === 0) {
@@ -39,6 +43,9 @@ export async function POST(
 
     return NextResponse.json({ status: 'ok', data: result });
   } catch (err: any) {
+    if (err?.message === 'AI provider is not configured.') {
+      return NextResponse.json({ status: 'error', error: 'AI provider is not configured.' }, { status: 400 });
+    }
     if (err instanceof AuthenticationRequiredError) {
       return NextResponse.json({ status: 'error', error: 'Authentication required' }, { status: 401 });
     }

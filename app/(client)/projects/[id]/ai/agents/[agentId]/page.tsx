@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Loader2,
   RotateCcw,
+  Plus,
 } from 'lucide-react';
 
 interface AgentRecord {
@@ -66,6 +67,13 @@ export default function AgentDetailsPage() {
   // Rollback modal state
   const [rollbackModal, setRollbackModal] = useState<{ open: boolean; versionNumber: number } | null>(null);
 
+  // Knowledge base attachment state
+  const [attachedKbs, setAttachedKbs] = useState<any[]>([]);
+  const [allProjectKbs, setAllProjectKbs] = useState<any[]>([]);
+  const [attachingKbId, setAttachingKbId] = useState<string>('');
+  const [showAttachKbModal, setShowAttachKbModal] = useState(false);
+  const [kbActionLoading, setKbActionLoading] = useState(false);
+
   const fetchAllData = useCallback(async () => {
     try {
       setLoading(true);
@@ -96,6 +104,22 @@ export default function AgentDetailsPage() {
       if (usageRes && usageRes.ok) {
         const usageJson = await usageRes.json();
         if (usageJson.status === 'ok') setUsage(usageJson.data);
+      }
+
+      // Fetch attached knowledge bases & all project KBs
+      const [attachedKbRes, allKbRes] = await Promise.all([
+        fetch(`/api/projects/${projectId}/ai/agents/${agentId}/knowledge`).catch((): Response | null => null),
+        fetch(`/api/projects/${projectId}/ai/knowledge`).catch((): Response | null => null),
+      ]);
+
+      if (attachedKbRes && attachedKbRes.ok) {
+        const json = await attachedKbRes.json();
+        if (json.status === 'ok') setAttachedKbs(json.data || []);
+      }
+
+      if (allKbRes && allKbRes.ok) {
+        const json = await allKbRes.json();
+        if (json.status === 'ok') setAllProjectKbs(json.data || []);
       }
     } catch (err: any) {
       console.error('Error loading agent:', err);
@@ -172,6 +196,51 @@ export default function AgentDetailsPage() {
       console.error('Rollback error:', err);
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleAttachKb = async (kbId: string) => {
+    if (!kbId) return;
+    setKbActionLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/ai/agents/${agentId}/knowledge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ knowledgeBaseId: kbId }),
+      });
+      const json = await res.json();
+      if (res.ok && json.status === 'ok') {
+        setShowAttachKbModal(false);
+        setAttachingKbId('');
+        await fetchAllData();
+      } else {
+        alert(json.error || 'Failed to attach knowledge base');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Attach failed');
+    } finally {
+      setKbActionLoading(false);
+    }
+  };
+
+  const handleDetachKb = async (kbId: string) => {
+    if (!confirm('Are you sure you want to disconnect this knowledge base from this agent?')) return;
+    setKbActionLoading(true);
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/ai/agents/${agentId}/knowledge?knowledgeBaseId=${kbId}`,
+        { method: 'DELETE' }
+      );
+      const json = await res.json();
+      if (res.ok && json.status === 'ok') {
+        await fetchAllData();
+      } else {
+        alert(json.error || 'Failed to detach knowledge base');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Detach failed');
+    } finally {
+      setKbActionLoading(false);
     }
   };
 
@@ -418,17 +487,87 @@ export default function AgentDetailsPage() {
 
       {/* TAB CONTENT: KNOWLEDGE */}
       {activeTab === 'knowledge' && (
-        <div className="bg-white rounded-3xl border border-gray-100 p-8 shadow-2xs text-center space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center mx-auto">
-            <Brain className="w-7 h-7" />
+        <div className="bg-white rounded-3xl border border-gray-100 p-6 sm:p-8 shadow-2xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-extrabold text-gray-900">Connected Knowledge Bases</h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                The agent will automatically retrieve verified business context from these knowledge bases.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAttachKbModal(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition self-start"
+            >
+              <Plus className="w-3.5 h-3.5" /> Attach Knowledge Base
+            </button>
           </div>
-          <div className="max-w-md mx-auto">
-            <h3 className="text-base font-extrabold text-gray-900 mb-1">Knowledge Base Integration (Step 8)</h3>
-            <p className="text-xs text-gray-500 leading-relaxed">
-              Step 8 will add full PDF/document embedding, semantic search, and knowledge grounding.
-              The agent is already hooked to support knowledge sources as soon as Step 8 is deployed.
-            </p>
-          </div>
+
+          {attachedKbs.length === 0 ? (
+            <div className="p-10 rounded-2xl bg-gray-50 border border-gray-100 text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+                <Brain className="w-6 h-6" />
+              </div>
+              <h4 className="text-xs font-bold text-gray-800">No Knowledge Bases Connected</h4>
+              <p className="text-[11px] text-gray-500 max-w-sm mx-auto">
+                Connect a knowledge base to ground this AI Agent with domain documents, FAQs, and product catalogs.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowAttachKbModal(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg border border-gray-300 text-gray-700 hover:bg-white transition"
+              >
+                <Plus className="w-3.5 h-3.5" /> Connect Knowledge Base
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {attachedKbs.map((kb) => (
+                <div
+                  key={kb.id}
+                  className="p-5 rounded-2xl border border-gray-200 hover:border-emerald-300 transition bg-white space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                        <Brain className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-gray-900">{kb.name}</h4>
+                        <p className="text-[10px] text-gray-500 line-clamp-1">{kb.description || 'No description'}</p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700">
+                      Active
+                    </span>
+                  </div>
+
+                  <div className="pt-3 border-t border-gray-100 flex items-center justify-between text-[11px]">
+                    <span className="text-gray-500 font-medium">
+                      {kb.sourceCount || 0} source documents
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <Link
+                        href={`/projects/${projectId}/ai/knowledge/${kb.id}`}
+                        className="text-emerald-600 hover:underline font-bold"
+                      >
+                        View Sources
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => handleDetachKb(kb.id)}
+                        disabled={kbActionLoading}
+                        className="text-red-500 hover:text-red-700 font-semibold"
+                      >
+                        Detach
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -529,6 +668,72 @@ export default function AgentDetailsPage() {
                 className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-2xs"
               >
                 {actionLoading ? 'Rolling back...' : 'Confirm Rollback'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Attach Knowledge Base Modal */}
+      {showAttachKbModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5">
+            <div>
+              <h3 className="text-base font-extrabold text-gray-900">Attach Knowledge Base</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Select a knowledge base from this project to attach to this AI Agent.
+              </p>
+            </div>
+
+            {allProjectKbs.filter((k) => !attachedKbs.some((ak) => ak.id === k.id)).length === 0 ? (
+              <div className="p-6 bg-gray-50 rounded-2xl text-center space-y-3 text-xs text-gray-500">
+                <p>No unattached knowledge bases found in this project.</p>
+                <Link
+                  href={`/projects/${projectId}/ai/knowledge/new`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-600 bg-white border border-gray-200 rounded-lg shadow-2xs"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Create New Knowledge Base
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-gray-700">Available Knowledge Bases</label>
+                <select
+                  value={attachingKbId}
+                  onChange={(e) => setAttachingKbId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-xs font-medium rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white"
+                >
+                  <option value="">Select a knowledge base...</option>
+                  {allProjectKbs
+                    .filter((k) => !attachedKbs.some((ak) => ak.id === k.id))
+                    .map((k) => (
+                      <option key={k.id} value={k.id}>
+                        {k.name} ({k.sourceCount || 0} sources)
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAttachKbModal(false);
+                  setAttachingKbId('');
+                }}
+                className="px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAttachKb(attachingKbId)}
+                disabled={kbActionLoading || !attachingKbId}
+                className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-2xs disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                {kbActionLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Connect
               </button>
             </div>
           </div>

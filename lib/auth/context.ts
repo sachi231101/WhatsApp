@@ -591,7 +591,8 @@ export async function ensureCoreTables(): Promise<void> {
     `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'ACTIVE';`,
     `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'MANUAL';`,
     `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email VARCHAR(255);`,
-    `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;`,
+    `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS lead_score INT DEFAULT 50;`,
+    `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS lifecycle_stage VARCHAR(50) DEFAULT 'lead';`,
     `ALTER TABLE contacts ALTER COLUMN wa_id DROP NOT NULL;`,
     `CREATE INDEX IF NOT EXISTS idx_contacts_proj ON contacts(project_id);`,
     `CREATE INDEX IF NOT EXISTS idx_contacts_ws_proj ON contacts(workspace_id, project_id);`,
@@ -771,6 +772,237 @@ export async function ensureCoreTables(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_ai_usage_ws_created ON ai_usage(workspace_id, created_at DESC);`,
     `CREATE INDEX IF NOT EXISTS idx_ai_usage_proj_created ON ai_usage(project_id, created_at DESC);`,
     `CREATE INDEX IF NOT EXISTS idx_ai_usage_agent_created ON ai_usage(agent_id, created_at DESC);`,
+    `ALTER TABLE ai_usage ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'INBOX';`,
+    `ALTER TABLE ai_usage ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';`,
+
+    // Step 8: Knowledge Base + pgvector RAG migrations
+    `CREATE EXTENSION IF NOT EXISTS vector;`,
+    `ALTER TABLE knowledge_bases ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id) ON DELETE CASCADE;`,
+    `ALTER TABLE knowledge_bases ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'ACTIVE' NOT NULL;`,
+    `ALTER TABLE knowledge_bases ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id) ON DELETE SET NULL;`,
+    `ALTER TABLE knowledge_bases ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE;`,
+    `CREATE INDEX IF NOT EXISTS idx_kb_proj ON knowledge_bases(project_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_kb_ws ON knowledge_bases(workspace_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_kb_status ON knowledge_bases(status);`,
+
+    `ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id) ON DELETE CASCADE;`,
+    `ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'TEXT' NOT NULL;`,
+    `ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS name VARCHAR(255);`,
+    `ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS source_url TEXT;`,
+    `ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS mime_type VARCHAR(100);`,
+    `ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS storage_key TEXT;`,
+    `ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS checksum VARCHAR(64);`,
+    `ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'PENDING' NOT NULL;`,
+    `ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS error_message TEXT;`,
+    `ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}' NOT NULL;`,
+    `ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS processed_at TIMESTAMP WITH TIME ZONE;`,
+    `CREATE INDEX IF NOT EXISTS idx_kb_sources_kb ON knowledge_sources(knowledge_base_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_kb_sources_proj ON knowledge_sources(project_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_kb_sources_status ON knowledge_sources(status);`,
+
+    `CREATE TABLE IF NOT EXISTS knowledge_documents (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      knowledge_source_id UUID NOT NULL REFERENCES knowledge_sources(id) ON DELETE CASCADE,
+      title VARCHAR(255) NOT NULL,
+      content TEXT NOT NULL,
+      language VARCHAR(50) DEFAULT 'en',
+      character_count INT DEFAULT 0 NOT NULL,
+      token_count INT DEFAULT 0 NOT NULL,
+      version INT DEFAULT 1 NOT NULL,
+      checksum VARCHAR(64),
+      status VARCHAR(50) DEFAULT 'READY' NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_kb_docs_source ON knowledge_documents(knowledge_source_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_kb_docs_ws ON knowledge_documents(workspace_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_kb_docs_proj ON knowledge_documents(project_id);`,
+
+    `CREATE TABLE IF NOT EXISTS knowledge_chunks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      knowledge_document_id UUID NOT NULL REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+      chunk_index INT NOT NULL,
+      content TEXT NOT NULL,
+      token_count INT NOT NULL,
+      embedding vector(1536),
+      metadata JSONB DEFAULT '{}' NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );`,
+    `ALTER TABLE knowledge_chunks ADD COLUMN IF NOT EXISTS workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE;`,
+    `ALTER TABLE knowledge_chunks ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id) ON DELETE CASCADE;`,
+    `ALTER TABLE knowledge_chunks ADD COLUMN IF NOT EXISTS knowledge_document_id UUID REFERENCES knowledge_documents(id) ON DELETE CASCADE;`,
+    `ALTER TABLE knowledge_chunks ADD COLUMN IF NOT EXISTS content TEXT;`,
+    `ALTER TABLE knowledge_chunks ADD COLUMN IF NOT EXISTS embedding vector(1536);`,
+    `ALTER TABLE knowledge_chunks ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';`,
+    `CREATE INDEX IF NOT EXISTS idx_kb_chunks_doc ON knowledge_chunks(knowledge_document_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_kb_chunks_ws_proj ON knowledge_chunks(workspace_id, project_id);`,
+
+    `CREATE INDEX IF NOT EXISTS idx_ai_agent_kb_agent ON ai_agent_knowledge_bases(agent_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_ai_agent_kb_kb ON ai_agent_knowledge_bases(knowledge_base_id);`,
+
+    // Step 9: Automation Module Phase 1: Database + Domain Foundation
+    `CREATE TABLE IF NOT EXISTS automations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      name VARCHAR(255) NOT NULL,
+      description TEXT,
+      status VARCHAR(50) DEFAULT 'DRAFT' NOT NULL,
+      current_version_id UUID,
+      created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      archived_at TIMESTAMP WITH TIME ZONE
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_automations_ws ON automations(workspace_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_automations_proj ON automations(project_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_automations_status ON automations(status);`,
+    `CREATE INDEX IF NOT EXISTS idx_automations_ws_proj ON automations(workspace_id, project_id);`,
+
+    `CREATE TABLE IF NOT EXISTS automation_versions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      automation_id UUID NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
+      version_number INT NOT NULL,
+      status VARCHAR(50) DEFAULT 'DRAFT' NOT NULL,
+      created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      published_at TIMESTAMP WITH TIME ZONE,
+      UNIQUE(automation_id, version_number)
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_versions_auto ON automation_versions(automation_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_versions_status ON automation_versions(status);`,
+
+    `DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_automations_curr_version'
+      ) THEN
+        ALTER TABLE automations
+        ADD CONSTRAINT fk_automations_curr_version
+        FOREIGN KEY (current_version_id) REFERENCES automation_versions(id) ON DELETE SET NULL;
+      END IF;
+    END $$;`,
+
+    `CREATE TABLE IF NOT EXISTS automation_nodes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      automation_version_id UUID NOT NULL REFERENCES automation_versions(id) ON DELETE CASCADE,
+      node_key VARCHAR(100) NOT NULL,
+      type VARCHAR(100) NOT NULL,
+      label VARCHAR(255) NOT NULL,
+      position_x NUMERIC(10, 2) DEFAULT 0 NOT NULL,
+      position_y NUMERIC(10, 2) DEFAULT 0 NOT NULL,
+      configuration JSONB DEFAULT '{}' NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      UNIQUE(automation_version_id, node_key)
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_nodes_version ON automation_nodes(automation_version_id);`,
+
+    `CREATE TABLE IF NOT EXISTS automation_edges (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      automation_version_id UUID NOT NULL REFERENCES automation_versions(id) ON DELETE CASCADE,
+      source_node_id UUID NOT NULL REFERENCES automation_nodes(id) ON DELETE CASCADE,
+      target_node_id UUID NOT NULL REFERENCES automation_nodes(id) ON DELETE CASCADE,
+      source_handle VARCHAR(100),
+      target_handle VARCHAR(100),
+      condition_key VARCHAR(100),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_edges_version ON automation_edges(automation_version_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_edges_source ON automation_edges(source_node_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_edges_target ON automation_edges(target_node_id);`,
+
+    `CREATE TABLE IF NOT EXISTS automation_executions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      automation_id UUID NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
+      automation_version_id UUID NOT NULL REFERENCES automation_versions(id) ON DELETE CASCADE,
+      trigger_type VARCHAR(100) NOT NULL,
+      trigger_event_id VARCHAR(255),
+      idempotency_key VARCHAR(255),
+      conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
+      contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL,
+      status VARCHAR(50) DEFAULT 'QUEUED' NOT NULL,
+      current_node_id UUID REFERENCES automation_nodes(id) ON DELETE SET NULL,
+      started_at TIMESTAMP WITH TIME ZONE,
+      completed_at TIMESTAMP WITH TIME ZONE,
+      failed_at TIMESTAMP WITH TIME ZONE,
+      error_code VARCHAR(100),
+      error_message TEXT,
+      metadata JSONB DEFAULT '{}' NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_exec_ws_created ON automation_executions(workspace_id, created_at DESC);`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_exec_proj_created ON automation_executions(project_id, created_at DESC);`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_exec_auto_created ON automation_executions(automation_id, created_at DESC);`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_exec_status ON automation_executions(status);`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_exec_trigger_event ON automation_executions(project_id, trigger_event_id);`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_auto_exec_idempotency ON automation_executions(workspace_id, project_id, idempotency_key) WHERE idempotency_key IS NOT NULL;`,
+
+    `CREATE TABLE IF NOT EXISTS automation_execution_steps (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      execution_id UUID NOT NULL REFERENCES automation_executions(id) ON DELETE CASCADE,
+      node_id UUID NOT NULL REFERENCES automation_nodes(id) ON DELETE CASCADE,
+      status VARCHAR(50) DEFAULT 'PENDING' NOT NULL,
+      input JSONB DEFAULT '{}' NOT NULL,
+      output JSONB DEFAULT '{}' NOT NULL,
+      error_code VARCHAR(100),
+      error_message TEXT,
+      started_at TIMESTAMP WITH TIME ZONE,
+      completed_at TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_exec_steps_exec ON automation_execution_steps(execution_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_exec_steps_node ON automation_execution_steps(node_id);`,
+
+    // Phase 14: Action Engine - Tasks & Action Idempotency
+    `CREATE TABLE IF NOT EXISTS tasks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL,
+      conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
+      title VARCHAR(255) NOT NULL,
+      description TEXT,
+      assignee_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      priority VARCHAR(20) DEFAULT 'medium' NOT NULL,
+      status VARCHAR(20) DEFAULT 'open' NOT NULL,
+      due_date TIMESTAMP WITH TIME ZONE,
+      source VARCHAR(50) DEFAULT 'AUTOMATION' NOT NULL,
+      idempotency_key VARCHAR(255),
+      metadata JSONB DEFAULT '{}' NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_tasks_proj_status ON tasks(project_id, status);`,
+    `CREATE INDEX IF NOT EXISTS idx_tasks_proj_created ON tasks(project_id, created_at DESC);`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_idempotency ON tasks(project_id, idempotency_key) WHERE idempotency_key IS NOT NULL;`,
+
+    `CREATE TABLE IF NOT EXISTS action_idempotency (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      execution_id UUID NOT NULL REFERENCES automation_executions(id) ON DELETE CASCADE,
+      node_id UUID NOT NULL,
+      idempotency_key VARCHAR(255) NOT NULL,
+      action_type VARCHAR(100) NOT NULL,
+      status VARCHAR(50) DEFAULT 'COMPLETED' NOT NULL,
+      side_effect_id VARCHAR(255),
+      output JSONB DEFAULT '{}' NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_action_idempotency_key ON action_idempotency(project_id, idempotency_key);`,
+    `CREATE INDEX IF NOT EXISTS idx_action_idempotency_exec ON action_idempotency(execution_id);`,
+
+    `ALTER TABLE internal_notes ALTER COLUMN user_id DROP NOT NULL;`,
+    `ALTER TABLE internal_notes ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'USER';`,
+    `ALTER TABLE internal_notes ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';`,
   ];
   for (const m of migrations) {
     try {
@@ -943,6 +1175,15 @@ export async function resolveWorkspaceContext(
       VALUES (${workspace.id}, ${user.id}, ${WORKSPACE_ROLES.OWNER}, 'active')
       ON CONFLICT (workspace_id, user_id) DO NOTHING
     `;
+
+    try {
+      await sql`
+        INSERT INTO projects (workspace_id, name, description, slug, status)
+        VALUES (${workspace.id}, 'Default Project', 'Default initial project', 'default', 'ACTIVE')
+      `;
+    } catch {
+      // Ignored if projects table doesn't exist yet
+    }
 
     return {
       userId: user.id,

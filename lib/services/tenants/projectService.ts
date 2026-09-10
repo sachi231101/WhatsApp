@@ -347,6 +347,22 @@ export class ProjectService {
       archivedAt: r.archived_at,
     };
   }
+
+  /**
+   * Ensures that a workspace has at least one active project.
+   * If none exists, creates and returns a default project.
+   */
+  async ensureDefaultProject(workspaceId: string, projectName = 'Default Project'): Promise<ProjectRecord> {
+    const existing = await this.getWorkspaceProjects(workspaceId, { status: 'ACTIVE' });
+    if (existing.length > 0) {
+      return existing[0];
+    }
+    return await this.createProject(workspaceId, {
+      name: projectName,
+      description: `Default project for workspace`,
+      slug: 'default',
+    });
+  }
 }
 
 export const projectService = new ProjectService();
