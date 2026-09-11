@@ -1041,6 +1041,54 @@ export async function ensureCoreTables(): Promise<void> {
 
 let tablesEnsured = false;
 
+function getTablesReadyFlag(): boolean {
+  const g = globalThis as typeof globalThis & { __wazzappTablesReady?: boolean };
+  return Boolean(tablesEnsured || g.__wazzappTablesReady);
+}
+
+function setTablesReadyFlag(): void {
+  tablesEnsured = true;
+  const g = globalThis as typeof globalThis & { __wazzappTablesReady?: boolean };
+  g.__wazzappTablesReady = true;
+}
+
+/**
+ * Skip the expensive multi-statement DDL when tables already exist.
+ * Turbopack/HMR resets module locals; globalThis keeps the warm flag alive.
+ */
+export async function ensureCoreTablesCached(): Promise<'skipped' | 'ddl' | 'probe-ok'> {
+  if (getTablesReadyFlag()) return 'skipped';
+
+  const g = globalThis as typeof globalThis & {
+    __wazzappTablesReady?: boolean;
+    __wazzappTablesReadyPromise?: Promise<'skipped' | 'ddl' | 'probe-ok'>;
+  };
+
+  if (g.__wazzappTablesReadyPromise) {
+    return g.__wazzappTablesReadyPromise;
+  }
+
+  g.__wazzappTablesReadyPromise = (async () => {
+    try {
+      await sql`SELECT 1 FROM workspaces LIMIT 1`;
+      setTablesReadyFlag();
+      return 'probe-ok' as const;
+    } catch {
+      // Tables missing or unreachable — run full DDL once
+    }
+
+    await ensureCoreTables();
+    setTablesReadyFlag();
+    return 'ddl' as const;
+  })();
+
+  try {
+    return await g.__wazzappTablesReadyPromise;
+  } finally {
+    g.__wazzappTablesReadyPromise = undefined;
+  }
+}
+
 /**
  * Resolves the authenticated user's workspace context.
  * In development or for new users, automatically seeds a default Tenant & Workspace.
@@ -1050,24 +1098,31 @@ export async function resolveWorkspaceContext(
   userName?: string,
   requestedWorkspaceId?: string,
 ): Promise<WorkspaceContext> {
-  if (!tablesEnsured) {
-    try {
-      await ensureCoreTables();
-      tablesEnsured = true;
-    } catch (err) {
-      console.warn('ensureCoreTables notice (using existing or falling back):', err);
-    }
+  try {
+    await ensureCoreTablesCached();
+  } catch (err) {
+    console.warn('ensureCoreTables notice (using existing or falling back):', err);
   }
 
   try {
-    // 1. Find or create user
-    const { rows: userRows } = await sql`
-      INSERT INTO users (auth0_sub, email, name)
-      VALUES (${'auth0|' + userEmail}, ${userEmail}, ${userName || userEmail.split('@')[0]})
-      ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
-      RETURNING id, email, name, is_super_admin, role
+    // 1. Find user (SELECT first — avoid write on every request)
+    const { rows: existingUserRows } = await sql`
+      SELECT id, email, name, is_super_admin, role
+      FROM users
+      WHERE LOWER(email) = ${userEmail.toLowerCase()}
+      LIMIT 1
     `;
-    const user = userRows[0];
+
+    let user = existingUserRows[0];
+    if (!user) {
+      const { rows: userRows } = await sql`
+        INSERT INTO users (auth0_sub, email, name)
+        VALUES (${'auth0|' + userEmail}, ${userEmail}, ${userName || userEmail.split('@')[0]})
+        ON CONFLICT (email) DO UPDATE SET name = COALESCE(EXCLUDED.name, users.name)
+        RETURNING id, email, name, is_super_admin, role
+      `;
+      user = userRows[0];
+    }
     const isSuperAdmin = Boolean(user.is_super_admin);
 
     // 2. Check for requested workspace or default membership
@@ -1199,19 +1254,24 @@ export async function resolveWorkspaceContext(
       isSuperAdmin,
     };
   } catch (error) {
-    console.error('Failed to resolve workspace context dynamically, using deterministic fallback:', error);
-    return {
-      userId: DEV_USER_ID,
-      userEmail,
-      userName: userName || 'Dev User',
-      tenantId: DEV_TENANT_ID,
-      tenantName: 'Acme Corp',
-      workspaceId: DEV_WORKSPACE_ID,
-      workspaceName: 'Default Workspace',
-      role: WORKSPACE_ROLES.OWNER,
-      userRole: 'admin',
-      permissions: getPermissionsForRole(WORKSPACE_ROLES.OWNER),
-      isSuperAdmin: true,
-    };
+    console.error('Failed to resolve workspace context dynamically:', error);
+    // Never return fake DEV workspace IDs for real client sessions — they break FKs
+    // (projects_workspace_id_fkey) and cause empty project lists / failed creates.
+    if (process.env.BYPASS_AUTH === 'true' && process.env.NODE_ENV !== 'production') {
+      return {
+        userId: DEV_USER_ID,
+        userEmail,
+        userName: userName || 'Dev User',
+        tenantId: DEV_TENANT_ID,
+        tenantName: 'Acme Corp',
+        workspaceId: DEV_WORKSPACE_ID,
+        workspaceName: 'Default Workspace',
+        role: WORKSPACE_ROLES.OWNER,
+        userRole: 'admin',
+        permissions: getPermissionsForRole(WORKSPACE_ROLES.OWNER),
+        isSuperAdmin: true,
+      };
+    }
+    throw error;
   }
 }

@@ -121,10 +121,18 @@ function StatCard({
             {value}
           </p>
           <p
-            className={`text-xs font-semibold flex items-center gap-0.5 ${up ? "text-green-500" : "text-red-500"}`}
+            className={`text-xs font-semibold flex items-center gap-0.5 ${
+              change === "—"
+                ? "text-gray-400"
+                : up
+                  ? "text-green-500"
+                  : "text-red-500"
+            }`}
           >
-            <ArrowUpRight className={`w-3 h-3 ${up ? "" : "rotate-180"}`} />
-            {change} vs last week
+            {change !== "—" && (
+              <ArrowUpRight className={`w-3 h-3 ${up ? "" : "rotate-180"}`} />
+            )}
+            {change === "—" ? "No prior period data" : `${change} vs last week`}
           </p>
         </div>
         <Sparkline color={sparkColor} up={up} />
@@ -364,13 +372,32 @@ function VideoGuideModal({
   );
 }
 
+type SetupProgress = {
+  workspaceCreated: boolean;
+  whatsappConnected: boolean;
+  hasAiAgent: boolean;
+  hasKnowledgeBase: boolean;
+  completedCount: number;
+  total: number;
+};
+
+const DEFAULT_SETUP: SetupProgress = {
+  workspaceCreated: true,
+  whatsappConnected: false,
+  hasAiAgent: false,
+  hasKnowledgeBase: false,
+  completedCount: 1,
+  total: 4,
+};
+
 // ─── Main Client Dashboard Page ───────────────────────────────────────────────
 export default function ClientDashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("");
   const [isWhatsAppConnected, setIsWhatsAppConnected] = useState(false);
-  const [previewMode, setPreviewMode] = useState<"setup" | "live">("setup");
+  const [setupProgress, setSetupProgress] =
+    useState<SetupProgress>(DEFAULT_SETUP);
   const [showVideoModal, setShowVideoModal] = useState(false);
 
   useEffect(() => {
@@ -378,7 +405,7 @@ export default function ClientDashboardPage() {
       .then((r) => r.json())
       .then((j) => {
         if (j.authenticated)
-          setUserName(j.user.name?.split(" ")[0] || "Sachin");
+          setUserName(j.user.name?.split(" ")[0] || "there");
       })
       .catch(() => {});
 
@@ -389,7 +416,18 @@ export default function ClientDashboardPage() {
           setData(j.data);
           const connected = Boolean(j.data?.isWhatsAppConnected);
           setIsWhatsAppConnected(connected);
-          setPreviewMode(connected ? "live" : "setup");
+          if (j.data?.setupProgress) {
+            setSetupProgress({
+              ...DEFAULT_SETUP,
+              ...j.data.setupProgress,
+            });
+          } else {
+            setSetupProgress({
+              ...DEFAULT_SETUP,
+              whatsappConnected: connected,
+              completedCount: connected ? 2 : 1,
+            });
+          }
         }
       })
       .catch(() => {})
@@ -397,63 +435,27 @@ export default function ClientDashboardPage() {
   }, []);
 
   const stats = data?.stats || {
-    activeConversations: 124,
-    aiResolutionRate: 68,
-    newLeads: 42,
-    messagesToday: 1284,
+    totalConversations: 0,
+    aiResolutionRate: 0,
+    conversionRate: "0%",
+    hotLeads: 0,
+    newContacts: 0,
+    messagesToday: 0,
+    activeContacts: 0,
   };
 
-  const recent: any[] = data?.recentConversations || [
-    {
-      id: "1",
-      profile_name: "Rahul Sharma",
-      last_message_preview: "Can you tell me the course price?",
-      assigned_to: "Priya",
-      status: "open",
-      last_message_at: new Date(Date.now() - 2 * 60000).toISOString(),
-    },
-    {
-      id: "2",
-      profile_name: "Priya Patel",
-      last_message_preview: "Thank you! 🙏",
-      assigned_to: "AI Agent",
-      status: "ai handling",
-      last_message_at: new Date(Date.now() - 10 * 60000).toISOString(),
-    },
-    {
-      id: "3",
-      profile_name: "Amit Kumar",
-      last_message_preview: "Do you have a demo class?",
-      assigned_to: "Vikram",
-      status: "open",
-      last_message_at: new Date(Date.now() - 25 * 60000).toISOString(),
-    },
-    {
-      id: "4",
-      profile_name: "Sneha Reddy",
-      last_message_preview: "What are the batch timings?",
-      assigned_to: "AI Agent",
-      status: "open",
-      last_message_at: new Date(Date.now() - 60 * 60000).toISOString(),
-    },
-    {
-      id: "5",
-      profile_name: "Vikrant Tiwari",
-      last_message_preview: "I want to enroll in this course",
-      assigned_to: "Neha",
-      status: "pending",
-      last_message_at: new Date(Date.now() - 120 * 60000).toISOString(),
-    },
-  ];
+  const recent: any[] = Array.isArray(data?.recentConversations)
+    ? data.recentConversations
+    : [];
 
   const barData = [
-    { label: "Apr 24", value: 95 },
-    { label: "Apr 25", value: 60 },
-    { label: "Apr 26", value: 45 },
-    { label: "Apr 27", value: 80 },
-    { label: "Apr 28", value: 110 },
-    { label: "Apr 29", value: 140 },
-    { label: "Apr 30", value: 165 },
+    { label: "Mon", value: Math.max(0, Math.round((stats.totalConversations || 0) * 0.5)) },
+    { label: "Tue", value: Math.max(0, Math.round((stats.totalConversations || 0) * 0.35)) },
+    { label: "Wed", value: Math.max(0, Math.round((stats.totalConversations || 0) * 0.4)) },
+    { label: "Thu", value: Math.max(0, Math.round((stats.totalConversations || 0) * 0.55)) },
+    { label: "Fri", value: Math.max(0, Math.round((stats.totalConversations || 0) * 0.7)) },
+    { label: "Sat", value: Math.max(0, Math.round((stats.totalConversations || 0) * 0.45)) },
+    { label: "Sun", value: Math.max(0, Math.round((stats.totalConversations || 0) * 0.3)) },
   ];
 
   const timeAgo = (iso: string) => {
@@ -480,7 +482,59 @@ export default function ClientDashboardPage() {
     "bg-orange-400",
   ];
 
-  const isSetupView = previewMode === "setup";
+  const isSetupView = !isWhatsAppConnected;
+  const completedCount = setupProgress.completedCount ?? 1;
+  const setupTotal = setupProgress.total ?? 4;
+  const progressPct = Math.round((completedCount / setupTotal) * 100);
+
+  const setupSteps = [
+    {
+      id: "workspace",
+      title: "Create workspace",
+      description: "Your workspace is ready",
+      done: setupProgress.workspaceCreated,
+      href: null as string | null,
+      ctaLabel: null as string | null,
+      showVideo: false,
+    },
+    {
+      id: "whatsapp",
+      title: "Connect WhatsApp Business",
+      description: "Link your Meta account to start receiving messages",
+      done: setupProgress.whatsappConnected,
+      href: "/settings?tab=whatsapp",
+      ctaLabel: "Connect WhatsApp",
+      showVideo: true,
+    },
+    {
+      id: "agent",
+      title: "Configure AI Agent",
+      description: "Set up your AI assistant",
+      done: setupProgress.hasAiAgent,
+      href: "/ai-agents",
+      ctaLabel: "Configure Agent",
+      showVideo: false,
+    },
+    {
+      id: "knowledge",
+      title: "Add Knowledge Base",
+      description: "Teach your AI about your business",
+      done: setupProgress.hasKnowledgeBase,
+      href: "/knowledge-base",
+      ctaLabel: "Add Knowledge",
+      showVideo: false,
+    },
+  ];
+
+  const nextStepIndex = setupSteps.findIndex((s) => !s.done);
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6">
+        <Loader2 className="w-6 h-6 animate-spin text-[#1b59f8]" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -488,7 +542,7 @@ export default function ClientDashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-            Welcome back, {userName || "Sachin"}{" "}
+            Welcome back, {userName || "there"}{" "}
             <span className="text-2xl">👋</span>
           </h1>
           <p className="text-xs sm:text-sm text-gray-500 mt-1">
@@ -499,31 +553,6 @@ export default function ClientDashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Preview State Toggle Switcher */}
-          <div className="flex items-center bg-gray-100 p-0.5 rounded-xl border border-gray-200/80 text-xs">
-            <button
-              onClick={() => setPreviewMode("setup")}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                previewMode === "setup"
-                  ? "bg-white text-gray-900 shadow-2xs"
-                  : "text-gray-500 hover:text-gray-800"
-              }`}
-            >
-              Setup Screen
-            </button>
-            <button
-              onClick={() => setPreviewMode("live")}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                previewMode === "live"
-                  ? "bg-white text-blue-600 shadow-2xs"
-                  : "text-gray-500 hover:text-gray-800"
-              }`}
-            >
-              Live Dashboard
-            </button>
-          </div>
-
-          {/* Need help card */}
           {isSetupView ? (
             <div className="hidden md:flex items-center gap-3 bg-blue-50/50 border border-blue-100/70 rounded-2xl px-3.5 py-2">
               <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-[#1b59f8] flex-shrink-0">
@@ -547,7 +576,7 @@ export default function ClientDashboardPage() {
           ) : (
             <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-600 font-medium hover:bg-gray-50 transition-all shadow-sm cursor-pointer">
               <Calendar className="w-4 h-4 text-gray-400" />
-              Apr 1, 2025 – Apr 30, 2025
+              Last 7 days
               <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
             </button>
           )}
@@ -567,15 +596,21 @@ export default function ClientDashboardPage() {
                 {/* Progress Badge and Bar */}
                 <div className="flex items-center gap-3 mb-5">
                   <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100/60">
-                    1 of 4 completed
+                    {completedCount} of {setupTotal} completed
                   </span>
                   <div className="flex-1 flex items-center gap-1.5">
-                    <div className="h-1.5 flex-1 rounded-full bg-emerald-500" />
-                    <div className="h-1.5 flex-1 rounded-full bg-gray-100" />
-                    <div className="h-1.5 flex-1 rounded-full bg-gray-100" />
-                    <div className="h-1.5 flex-1 rounded-full bg-gray-100" />
+                    {Array.from({ length: setupTotal }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-1.5 flex-1 rounded-full ${
+                          i < completedCount ? "bg-emerald-500" : "bg-gray-100"
+                        }`}
+                      />
+                    ))}
                   </div>
-                  <span className="text-xs font-bold text-gray-400">25%</span>
+                  <span className="text-xs font-bold text-gray-400">
+                    {progressPct}%
+                  </span>
                 </div>
 
                 {/* Section Titles */}
@@ -589,105 +624,85 @@ export default function ClientDashboardPage() {
 
                 {/* Steps List */}
                 <div className="space-y-5">
-                  {/* Step 1: Create workspace */}
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
-                        <Check className="w-4 h-4 stroke-[3]" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-gray-900">
-                          Create workspace
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          Your workspace is ready
-                        </p>
-                      </div>
-                    </div>
-                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 border border-emerald-100/50 text-[11px] font-bold rounded-lg">
-                      Completed
-                    </span>
-                  </div>
+                  {setupSteps.map((step, index) => {
+                    const isNext = index === nextStepIndex;
+                    const stepNumber = index + 1;
 
-                  {/* Step 2: Connect WhatsApp Business (Active / Next Step) */}
-                  <div className="space-y-3.5">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-7 h-7 rounded-full bg-[#1b59f8] text-white flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-xs">
-                          2
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-gray-900">
-                            Connect WhatsApp Business
-                          </p>
-                          <p className="text-xs text-gray-400">
-                            Link your Meta account to start receiving messages
-                          </p>
-                        </div>
-                      </div>
-                      <span className="px-2.5 py-1 bg-blue-50 text-[#1b59f8] border border-blue-100/60 text-[11px] font-bold rounded-lg">
-                        Next step
-                      </span>
-                    </div>
-
-                    {/* Step 2 Action Buttons */}
-                    <div className="pl-10 flex flex-wrap items-center gap-3 pt-1">
-                      <Link
-                        href="/settings?tab=whatsapp"
-                        className="px-5 py-2.5 bg-[#1b59f8] hover:bg-blue-600 text-white font-bold text-sm rounded-xl shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all cursor-pointer"
+                    return (
+                      <div
+                        key={step.id}
+                        className={isNext && step.href ? "space-y-3.5" : undefined}
                       >
-                        <WhatsAppIcon className="w-4.5 h-4.5 fill-white text-white" />
-                        Connect WhatsApp
-                      </Link>
-                      <button
-                        onClick={() => setShowVideoModal(true)}
-                        className="px-4 py-2.5 bg-white hover:bg-gray-50 border border-gray-200 text-[#1b59f8] font-bold text-sm rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-2xs"
-                      >
-                        <PlayCircle className="w-4.5 h-4.5 text-[#1b59f8]" />
-                        Watch Video (2 min)
-                      </button>
-                    </div>
-                  </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3.5">
+                            {step.done ? (
+                              <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+                                <Check className="w-4 h-4 stroke-[3]" />
+                              </div>
+                            ) : isNext ? (
+                              <div className="w-7 h-7 rounded-full bg-[#1b59f8] text-white flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-xs">
+                                {stepNumber}
+                              </div>
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                                {stepNumber}
+                              </div>
+                            )}
+                            <div>
+                              <p
+                                className={`text-sm font-bold ${
+                                  step.done || isNext
+                                    ? "text-gray-900"
+                                    : "text-gray-700"
+                                }`}
+                              >
+                                {step.title}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                {step.description}
+                              </p>
+                            </div>
+                          </div>
+                          {step.done ? (
+                            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 border border-emerald-100/50 text-[11px] font-bold rounded-lg">
+                              Completed
+                            </span>
+                          ) : isNext ? (
+                            <span className="px-2.5 py-1 bg-blue-50 text-[#1b59f8] border border-blue-100/60 text-[11px] font-bold rounded-lg">
+                              Next step
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 bg-gray-100 text-gray-400 text-[11px] font-medium rounded-lg">
+                              Pending
+                            </span>
+                          )}
+                        </div>
 
-                  {/* Step 3: Configure AI Agent */}
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-7 h-7 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold text-xs flex-shrink-0">
-                        3
+                        {isNext && step.href && (
+                          <div className="pl-10 flex flex-wrap items-center gap-3 pt-1">
+                            <Link
+                              href={step.href}
+                              className="px-5 py-2.5 bg-[#1b59f8] hover:bg-blue-600 text-white font-bold text-sm rounded-xl shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all cursor-pointer"
+                            >
+                              {step.id === "whatsapp" ? (
+                                <WhatsAppIcon className="w-4.5 h-4.5 fill-white text-white" />
+                              ) : null}
+                              {step.ctaLabel}
+                            </Link>
+                            {step.showVideo && (
+                              <button
+                                onClick={() => setShowVideoModal(true)}
+                                className="px-4 py-2.5 bg-white hover:bg-gray-50 border border-gray-200 text-[#1b59f8] font-bold text-sm rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-2xs"
+                              >
+                                <PlayCircle className="w-4.5 h-4.5 text-[#1b59f8]" />
+                                Watch Video (2 min)
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <div>
-                        <p className="text-sm font-bold text-gray-700">
-                          Configure AI Agent
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          Set up your AI assistant
-                        </p>
-                      </div>
-                    </div>
-                    <span className="px-2.5 py-1 bg-gray-100 text-gray-400 text-[11px] font-medium rounded-lg">
-                      Pending
-                    </span>
-                  </div>
-
-                  {/* Step 4: Add Knowledge Base */}
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-7 h-7 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold text-xs flex-shrink-0">
-                        4
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-gray-700">
-                          Add Knowledge Base
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          Teach your AI about your business
-                        </p>
-                      </div>
-                    </div>
-                    <span className="px-2.5 py-1 bg-gray-100 text-gray-400 text-[11px] font-medium rounded-lg">
-                      Pending
-                    </span>
-                  </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -900,10 +915,8 @@ export default function ClientDashboardPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               label="Active Conversations"
-              value={
-                stats.totalConversations || stats.activeConversations || 124
-              }
-              change="12%"
+              value={stats.totalConversations ?? 0}
+              change="—"
               up
               icon={MessageSquare}
               iconBg="bg-green-100"
@@ -912,8 +925,8 @@ export default function ClientDashboardPage() {
             />
             <StatCard
               label="AI Resolution Rate"
-              value={`${stats.conversionRate || `${stats.aiResolutionRate || 68}%`}`}
-              change="8%"
+              value={`${stats.conversionRate || `${stats.aiResolutionRate ?? 0}%`}`}
+              change="—"
               up
               icon={Bot}
               iconBg="bg-purple-100"
@@ -922,8 +935,8 @@ export default function ClientDashboardPage() {
             />
             <StatCard
               label="New Leads"
-              value={stats.hotLeads || stats.newLeads || 42}
-              change="15%"
+              value={stats.hotLeads ?? stats.newContacts ?? 0}
+              change="—"
               up
               icon={Users}
               iconBg="bg-blue-100"
@@ -932,8 +945,8 @@ export default function ClientDashboardPage() {
             />
             <StatCard
               label="Messages Today"
-              value={(stats.messagesToday || 1284).toLocaleString()}
-              change="20%"
+              value={(stats.messagesToday ?? 0).toLocaleString()}
+              change="—"
               up
               icon={Send}
               iconBg="bg-orange-100"
@@ -991,14 +1004,17 @@ export default function ClientDashboardPage() {
                     </h2>
                   </div>
                   <DonutChart
-                    aiPct={68}
-                    humanPct={24}
-                    unassignedPct={8}
-                    total={
-                      stats.totalConversations ||
-                      stats.activeConversations ||
-                      124
+                    aiPct={Math.round(Number(stats.aiResolutionRate) || 0)}
+                    humanPct={
+                      stats.totalConversations > 0
+                        ? Math.max(
+                            0,
+                            100 - Math.round(Number(stats.aiResolutionRate) || 0),
+                          )
+                        : 0
                     }
+                    unassignedPct={0}
+                    total={stats.totalConversations ?? 0}
                   />
                 </div>
               </div>
@@ -1022,43 +1038,54 @@ export default function ClientDashboardPage() {
                   </Link>
                 </div>
                 <div className="divide-y divide-gray-50">
-                  {recent.map((conv, idx) => (
-                    <div
-                      key={conv.id || idx}
-                      className="p-4 flex items-center justify-between hover:bg-gray-50/70 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className={`w-9 h-9 rounded-full ${
-                            avatarColors[idx % avatarColors.length]
-                          } flex items-center justify-center text-xs font-bold text-white flex-shrink-0`}
-                        >
-                          {avatarInitials(conv.profile_name || "User")}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-xs font-bold text-gray-800 truncate">
-                              {conv.profile_name || "Anonymous"}
-                            </p>
-                            <StatusPill status={conv.status || "open"} />
+                  {recent.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <p className="text-sm font-medium text-gray-700">
+                        No conversations yet
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Messages will appear here once customers start chatting.
+                      </p>
+                    </div>
+                  ) : (
+                    recent.map((conv, idx) => (
+                      <div
+                        key={conv.id || idx}
+                        className="p-4 flex items-center justify-between hover:bg-gray-50/70 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className={`w-9 h-9 rounded-full ${
+                              avatarColors[idx % avatarColors.length]
+                            } flex items-center justify-center text-xs font-bold text-white flex-shrink-0`}
+                          >
+                            {avatarInitials(conv.profile_name || "User")}
                           </div>
-                          <p className="text-[11px] text-gray-400 truncate mt-0.5">
-                            {conv.last_message_preview || "No messages yet"}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-bold text-gray-800 truncate">
+                                {conv.profile_name || "Anonymous"}
+                              </p>
+                              <StatusPill status={conv.status || "open"} />
+                            </div>
+                            <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                              {conv.last_message_preview || "No messages yet"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0 ml-3">
+                          <p className="text-[10px] text-gray-400">
+                            {conv.last_message_at
+                              ? timeAgo(conv.last_message_at)
+                              : "recently"}
+                          </p>
+                          <p className="text-[10px] font-medium text-gray-500 mt-0.5">
+                            {conv.assigned_to || "Unassigned"}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right flex-shrink-0 ml-3">
-                        <p className="text-[10px] text-gray-400">
-                          {conv.last_message_at
-                            ? timeAgo(conv.last_message_at)
-                            : "recently"}
-                        </p>
-                        <p className="text-[10px] font-medium text-gray-500 mt-0.5">
-                          {conv.assigned_to || "AI Agent"}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -1113,8 +1140,11 @@ export default function ClientDashboardPage() {
                     bg: "bg-yellow-100",
                     color: "text-yellow-500",
                     label: "High-value opportunities",
-                    value: "12 hot leads this week",
-                    sub: "Estimated revenue: ₹2,40,000",
+                    value: `${stats.hotLeads ?? 0} hot leads this week`,
+                    sub:
+                      (stats.hotLeads ?? 0) > 0
+                        ? "Prioritize these contacts in Inbox"
+                        : "Hot leads will appear as contacts engage",
                   },
                 ].map((item) => (
                   <div key={item.label} className="flex items-start gap-2.5">

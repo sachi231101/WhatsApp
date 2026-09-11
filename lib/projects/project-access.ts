@@ -45,38 +45,50 @@ export async function requireProjectAccess(
     effectiveUserId = user.id;
   }
 
-  // Query project and user's membership in that project's workspace in a single secure query
+  // Query project + membership from either membership table (register uses workspace_memberships)
   const { rows } = await sql`
     SELECT 
       p.id, p.workspace_id, p.name, p.description, p.slug, p.status, p.created_at, p.updated_at, p.archived_at,
       w.id as ws_id, w.name as ws_name, w.slug as ws_slug, w.status as ws_status, w.tenant_id as ws_tenant_id, w.created_at as ws_created_at, w.updated_at as ws_updated_at,
-      wm.id as member_id, wm.role, wm.status as member_status, wm.created_at as member_created_at, wm.updated_at as member_updated_at
+      COALESCE(wm.id, wmm.id) as member_id,
+      COALESCE(wm.role, wmm.role) as role,
+      COALESCE(wm.status, wmm.invitation_status) as member_status,
+      COALESCE(wm.created_at, wmm.created_at) as member_created_at,
+      COALESCE(wm.updated_at, wmm.updated_at) as member_updated_at
     FROM projects p
     JOIN workspaces w ON p.workspace_id = w.id
     LEFT JOIN workspace_members wm ON w.id = wm.workspace_id AND wm.user_id = ${effectiveUserId}
+    LEFT JOIN workspace_memberships wmm ON w.id = wmm.workspace_id AND wmm.user_id = ${effectiveUserId}
     WHERE p.id = ${projectId}
     LIMIT 1
   `;
 
   if (rows.length === 0) {
-    // Non-disclosing 404
     throw new ProjectNotFoundError();
   }
 
   const r = rows[0];
 
-  // If the user has no membership in this workspace, return non-disclosing 404
   if (!r.member_id) {
-    // Check if user is SuperAdmin as a special fallback
     const user = await getCurrentUser();
     if (!user?.isSuperAdmin) {
       throw new ProjectNotFoundError();
+    }
+  } else {
+    // Best-effort mirror into workspace_members for future queries
+    try {
+      await sql`
+        INSERT INTO workspace_members (workspace_id, user_id, role, status, invitation_status)
+        VALUES (${r.ws_id}, ${effectiveUserId}, ${r.role || 'owner'}, 'active', 'active')
+        ON CONFLICT (workspace_id, user_id) DO NOTHING
+      `;
+    } catch {
+      // ignore
     }
   }
 
   const role = r.role ? normalizeWorkspaceRole(r.role) : WORKSPACE_ROLES.OWNER;
 
-  // Verify minimum role level if specified
   if (minRole) {
     const authorized = hasRoleAtLeast(role, minRole);
     if (!authorized) {

@@ -1,6 +1,6 @@
 import { auth0 } from '@/lib/auth0';
 import { sql } from '@/lib/db';
-import { ensureCoreTables } from './context';
+import { ensureCoreTables, ensureCoreTablesCached } from './context';
 
 export interface UserRecord {
   id: string;
@@ -29,12 +29,17 @@ export class AuthenticationRequiredError extends Error {
 let coreTablesChecked = false;
 
 async function checkTables() {
-  if (!coreTablesChecked) {
+  if (coreTablesChecked) return;
+  try {
+    await ensureCoreTablesCached();
+    coreTablesChecked = true;
+  } catch (err) {
+    console.warn('checkTables warning:', err);
     try {
       await ensureCoreTables();
       coreTablesChecked = true;
-    } catch (err) {
-      console.warn('checkTables warning:', err);
+    } catch (err2) {
+      console.warn('checkTables fallback warning:', err2);
     }
   }
 }

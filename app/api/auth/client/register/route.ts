@@ -76,11 +76,20 @@ export async function POST(request: NextRequest) {
     `;
     const workspace = wsRows[0];
 
-    // 4. Assign Owner membership
+    // 4. Assign Owner membership (both membership tables used across codebase)
     await sql`
       INSERT INTO workspace_memberships (workspace_id, user_id, role, invitation_status)
       VALUES (${workspace.id}, ${user.id}, ${WORKSPACE_ROLES.OWNER}, 'active')
     `;
+    try {
+      await sql`
+        INSERT INTO workspace_members (workspace_id, user_id, role, status, invitation_status)
+        VALUES (${workspace.id}, ${user.id}, ${WORKSPACE_ROLES.OWNER}, 'active', 'active')
+        ON CONFLICT (workspace_id, user_id) DO NOTHING
+      `;
+    } catch (memberErr) {
+      console.warn('Notice: Could not mirror membership into workspace_members:', memberErr);
+    }
 
     // 4b. Provision Default Project
     let defaultProjectId = '';

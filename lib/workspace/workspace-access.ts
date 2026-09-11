@@ -213,7 +213,7 @@ export async function requireWorkspaceMember(
     isSuperAdmin = Boolean(user.isSuperAdmin);
   }
 
-  const { rows } = await sql`
+  const membersResult = await sql`
     SELECT 
       w.id, w.name, w.slug, w.status, w.tenant_id, w.created_at, w.updated_at,
       wm.id as member_id, wm.role, wm.status as member_status, wm.created_at as member_created_at, wm.updated_at as member_updated_at
@@ -225,6 +225,43 @@ export async function requireWorkspaceMember(
       AND (wm.status = 'active' OR wm.invitation_status = 'active' OR wm.status IS NULL)
     LIMIT 1
   `;
+  let rows = membersResult.rows;
+
+  if (rows.length === 0) {
+    // Fallback: client register / auth context use workspace_memberships
+    const { rows: membershipRows } = await sql`
+      SELECT 
+        w.id, w.name, w.slug, w.status, w.tenant_id, w.created_at, w.updated_at,
+        wm.id as member_id, wm.role, wm.invitation_status as member_status,
+        wm.created_at as member_created_at, wm.updated_at as member_updated_at
+      FROM workspaces w
+      JOIN workspace_memberships wm ON w.id = wm.workspace_id
+      WHERE wm.user_id = ${effectiveUserId}
+        AND w.id = ${workspaceId}
+        AND (w.status IS NULL OR w.status = 'active')
+        AND (wm.invitation_status IS NULL OR wm.invitation_status = 'active')
+      LIMIT 1
+    `;
+    if (membershipRows.length > 0) {
+      rows = membershipRows;
+      // Best-effort sync into workspace_members so future checks hit the primary table
+      try {
+        await sql`
+          INSERT INTO workspace_members (workspace_id, user_id, role, status, invitation_status)
+          VALUES (
+            ${membershipRows[0].id},
+            ${effectiveUserId},
+            ${membershipRows[0].role || 'owner'},
+            'active',
+            'active'
+          )
+          ON CONFLICT (workspace_id, user_id) DO NOTHING
+        `;
+      } catch {
+        // ignore sync failures
+      }
+    }
+  }
 
   if (rows.length > 0) {
     const r = rows[0];

@@ -1,8 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/app/api/authWrapper';
 import { projectService } from '@/lib/services/tenants/projectService';
-import { requireWorkspaceRole } from '@/lib/workspace/workspace-access';
-import { WORKSPACE_ROLES } from '@/lib/auth/roles';
+import { WORKSPACE_ROLES, hasRoleAtLeast } from '@/lib/auth/roles';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,8 +52,20 @@ export const POST = withAuth(async function createProject(request: NextRequest, 
   try {
     const workspaceId = session.workspace.workspaceId;
 
-    // Verify role authorization (AGENT or higher)
-    await requireWorkspaceRole(workspaceId, WORKSPACE_ROLES.AGENT, session.workspace.userId);
+    // Use role already resolved by withAuth (workspace_memberships).
+    // requireWorkspaceRole only queried workspace_members and 403'd owners.
+    if (
+      !session.workspace.isSuperAdmin &&
+      !hasRoleAtLeast(session.workspace.role, WORKSPACE_ROLES.AGENT)
+    ) {
+      return NextResponse.json(
+        {
+          error: 'Forbidden',
+          message: `Action requires role '${WORKSPACE_ROLES.AGENT}' or higher.`,
+        },
+        { status: 403 },
+      );
+    }
 
     const body = await request.json();
     const { name, description, slug } = body;
