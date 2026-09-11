@@ -33,6 +33,8 @@ export default async function AdminHomePage() {
     redirect('/dashboard');
   }
 
+  redirect('/admin/dashboard');
+
   const adminModules = [
     {
       title: 'WhatsApp Accounts',

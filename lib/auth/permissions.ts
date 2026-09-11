@@ -1,6 +1,35 @@
-import { WORKSPACE_ROLES, type WorkspaceRole } from './roles';
+import { WORKSPACE_ROLES, type WorkspaceRole, PLATFORM_ROLES } from './roles';
 
 export const PERMISSIONS = {
+  // Platform admin permissions
+  PLATFORM_TENANTS_VIEW: 'platform:tenants:view',
+  PLATFORM_TENANTS_MANAGE: 'platform:tenants:manage',
+  PLATFORM_TENANTS_DELETE: 'platform:tenants:delete',
+  PLATFORM_USERS_VIEW: 'platform:users:view',
+  PLATFORM_USERS_MANAGE: 'platform:users:manage',
+  PLATFORM_USERS_DELETE: 'platform:users:delete',
+  PLATFORM_BILLING_VIEW: 'platform:billing:view',
+  PLATFORM_BILLING_MANAGE: 'platform:billing:manage',
+  PLATFORM_BILLING_REFUND: 'platform:billing:refund',
+  PLATFORM_WHATSAPP_VIEW: 'platform:whatsapp:view',
+  PLATFORM_WHATSAPP_MANAGE: 'platform:whatsapp:manage',
+  PLATFORM_WHATSAPP_CREDENTIALS: 'platform:whatsapp:credentials',
+  PLATFORM_AI_VIEW: 'platform:ai:view',
+  PLATFORM_AI_MANAGE: 'platform:ai:manage',
+  PLATFORM_CAMPAIGNS_VIEW: 'platform:campaigns:view',
+  PLATFORM_CAMPAIGNS_MANAGE: 'platform:campaigns:manage',
+  PLATFORM_AUTOMATIONS_VIEW: 'platform:automations:view',
+  PLATFORM_AUTOMATIONS_MANAGE: 'platform:automations:manage',
+  PLATFORM_COMMERCE_VIEW: 'platform:commerce:view',
+  PLATFORM_SUPPORT_VIEW: 'platform:support:view',
+  PLATFORM_SUPPORT_MANAGE: 'platform:support:manage',
+  PLATFORM_ANALYTICS_VIEW: 'platform:analytics:view',
+  PLATFORM_MONITORING_VIEW: 'platform:monitoring:view',
+  PLATFORM_AUDIT_VIEW: 'platform:audit:view',
+  PLATFORM_SETTINGS_VIEW: 'platform:settings:view',
+  PLATFORM_SETTINGS_MANAGE: 'platform:settings:manage',
+  PLATFORM_SUPER: 'platform:super',
+
   // Workspace management
   WORKSPACE_VIEW: 'workspace:view',
   WORKSPACE_MANAGE: 'workspace:manage',
@@ -145,6 +174,35 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRole, readonly PermissionCode[]> 
   ],
 };
 
+// Platform role permission mapping
+export const PLATFORM_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
+  [PLATFORM_ROLES.SUPER_ADMIN]: Object.values(PERMISSIONS),
+  [PLATFORM_ROLES.PLATFORM_ADMIN]: [
+    PERMISSIONS.PLATFORM_TENANTS_VIEW, PERMISSIONS.PLATFORM_TENANTS_MANAGE,
+    PERMISSIONS.PLATFORM_USERS_VIEW, PERMISSIONS.PLATFORM_USERS_MANAGE,
+    PERMISSIONS.PLATFORM_BILLING_VIEW, PERMISSIONS.PLATFORM_WHATSAPP_VIEW,
+    PERMISSIONS.PLATFORM_AI_VIEW, PERMISSIONS.PLATFORM_CAMPAIGNS_VIEW,
+    PERMISSIONS.PLATFORM_AUTOMATIONS_VIEW, PERMISSIONS.PLATFORM_COMMERCE_VIEW,
+    PERMISSIONS.PLATFORM_ANALYTICS_VIEW, PERMISSIONS.PLATFORM_MONITORING_VIEW,
+    PERMISSIONS.PLATFORM_AUDIT_VIEW, PERMISSIONS.PLATFORM_SETTINGS_VIEW,
+  ],
+  [PLATFORM_ROLES.FINANCE_ADMIN]: [
+    PERMISSIONS.PLATFORM_BILLING_VIEW, PERMISSIONS.PLATFORM_BILLING_MANAGE, PERMISSIONS.PLATFORM_BILLING_REFUND,
+    PERMISSIONS.PLATFORM_TENANTS_VIEW, PERMISSIONS.PLATFORM_ANALYTICS_VIEW,
+  ],
+  [PLATFORM_ROLES.OPERATIONS_ADMIN]: [
+    PERMISSIONS.PLATFORM_WHATSAPP_VIEW, PERMISSIONS.PLATFORM_WHATSAPP_MANAGE,
+    PERMISSIONS.PLATFORM_AI_VIEW, PERMISSIONS.PLATFORM_CAMPAIGNS_VIEW,
+    PERMISSIONS.PLATFORM_AUTOMATIONS_VIEW, PERMISSIONS.PLATFORM_MONITORING_VIEW,
+    PERMISSIONS.PLATFORM_TENANTS_VIEW, PERMISSIONS.PLATFORM_USERS_VIEW,
+  ],
+  [PLATFORM_ROLES.SUPPORT_ADMIN]: [
+    PERMISSIONS.PLATFORM_TENANTS_VIEW, PERMISSIONS.PLATFORM_USERS_VIEW,
+    PERMISSIONS.PLATFORM_SUPPORT_VIEW, PERMISSIONS.PLATFORM_SUPPORT_MANAGE,
+    PERMISSIONS.PLATFORM_WHATSAPP_VIEW, PERMISSIONS.PLATFORM_AUDIT_VIEW,
+  ],
+};
+
 // Aliases for uppercase access
 (ROLE_PERMISSIONS as any).OWNER = ROLE_PERMISSIONS[WORKSPACE_ROLES.OWNER];
 (ROLE_PERMISSIONS as any).ADMIN = ROLE_PERMISSIONS[WORKSPACE_ROLES.ADMIN];
@@ -153,6 +211,21 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRole, readonly PermissionCode[]> 
 (ROLE_PERMISSIONS as any).AGENT = ROLE_PERMISSIONS[WORKSPACE_ROLES.AGENT];
 (ROLE_PERMISSIONS as any).VIEWER = ROLE_PERMISSIONS[WORKSPACE_ROLES.VIEWER];
 
+
+export function hasPlatformPermission(
+  role: string | undefined | null,
+  permission: string,
+): boolean {
+  if (!role) return false;
+  const normalized = (role as string).toLowerCase();
+  const granted = PLATFORM_ROLE_PERMISSIONS[normalized] || PLATFORM_ROLE_PERMISSIONS[(role as string).toUpperCase()] || PLATFORM_ROLE_PERMISSIONS[role];
+  if (!granted) {
+    // super_admin bypass
+    if (normalized === 'super_admin' || normalized === 'admin') return true;
+    return false;
+  }
+  return (granted as readonly string[]).includes(permission) || (granted as readonly string[]).includes(PERMISSIONS.PLATFORM_SUPER);
+}
 
 /**
  * Checks if a specific workspace role is granted a given permission.
