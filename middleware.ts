@@ -3,36 +3,10 @@ import { Auth0Client } from '@auth0/nextjs-auth0/server';
 
 const auth0 = new Auth0Client();
 
-// Admin-only paths — platform console + legacy Meta sample pages
+// Admin-only paths — platform console + paid messaging tool
 const ADMIN_PATHS = [
   '/admin',
-  '/my-wabas',
-  '/my-webhooks',
-  '/my-pages',
-  '/my-ad-accounts',
-  '/my-datasets',
-  '/my-catalogs',
-  '/my-instagram-accounts',
   '/paid_messaging',
-  '/certificates',
-  '/admin/dashboard',
-  '/admin/tenants',
-  '/admin/users',
-  '/admin/billing',
-  '/admin/whatsapp',
-  '/admin/ai',
-  '/admin/campaigns',
-  '/admin/automations',
-  '/admin/commerce',
-  '/admin/support',
-  '/admin/marketing',
-  '/admin/quick-replies',
-  '/admin/short-links',
-  '/admin/analytics',
-  '/admin/monitoring',
-  '/admin/audit-logs',
-  '/admin/settings',
-  '/admin/search',
 ];
 
 // Client SaaS paths

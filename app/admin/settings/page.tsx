@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { Settings, ShieldCheck, Globe, CreditCard, Mail, Database, Languages, KeyRound, Palette } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -18,7 +18,7 @@ const tabs = [
   { id: 'limits', label: 'Limits', icon: Settings, desc: 'File • API • Platform limits' },
 ];
 
-export default function AdminSettingsPage() {
+function AdminSettingsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const active = searchParams.get('tab') || 'general';
@@ -101,7 +101,7 @@ export default function AdminSettingsPage() {
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-white">Billing</h3>
             <div className="grid sm:grid-cols-2 gap-3">
-              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06]"><p className="text-xs font-bold text-white">Payment Gateways</p><p className="text-xs text-white/40">Razorpay • Stripe via PaymentProvider abstraction <span className="font-mono text-white/60">lib/services/billing/paymentProvider.ts</span></p></div>
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06]"><p className="text-xs font-bold text-white">Payment Gateways</p><p className="text-xs text-white/40">Razorpay • Stripe — configure keys in environment (mock mode when unset)</p></div>
               <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06]"><p className="text-xs font-bold text-white">Currency / Tax / Invoices</p><p className="text-xs text-white/40">Default USD • tax_percent per plan • invoice_number unique • due_date • paid_at</p></div>
             </div>
           </div>
@@ -127,5 +127,13 @@ export default function AdminSettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AdminSettingsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-white/40 text-xs">Loading platform settings...</div>}>
+      <AdminSettingsContent />
+    </Suspense>
   );
 }

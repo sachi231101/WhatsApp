@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Building2, Eye, Ban, CheckCircle2, Trash2, CreditCard, ExternalLink, Plus, Search } from 'lucide-react';
 import { AdminTable, AdminBadge } from '@/components/admin/AdminTable';
 import { AdminModal, ConfirmDialog } from '@/components/admin/AdminModal';
 
-export default function TenantsPage() {
+function TenantsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const statusFilter = searchParams.get('status') || '';
@@ -168,5 +168,13 @@ export default function TenantsPage() {
         </form>
       </AdminModal>
     </div>
+  );
+}
+
+export default function TenantsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-white/40 text-xs">Loading tenants...</div>}>
+      <TenantsContent />
+    </Suspense>
   );
 }

@@ -340,6 +340,7 @@ export const messages = pgTable(
     index('msg_conversation_created_idx').on(table.conversationId, table.createdAt),
     index('msg_workspace_idx').on(table.workspaceId),
     index('msg_project_created_idx').on(table.projectId, table.createdAt),
+    uniqueIndex('idx_messages_idempotency_key').on(table.workspaceId, table.projectId, table.idempotencyKey),
   ],
 );
 

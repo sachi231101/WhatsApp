@@ -3,6 +3,8 @@ import { encrypt, decrypt } from '@/lib/crypto/encryption';
 import { metaGraphClient, MetaGraphApiException } from '@/lib/meta/graphClient';
 import { getToken, subscribeWebhook } from '@/app/api/beUtils';
 import { isMockMode } from '@/app/api/mockData';
+import getPrivateConfig from '@/app/privateConfig';
+import { isWhatsAppDevConfigAvailable } from '@/lib/whatsapp/devConfig';
 import type { SessionInfo } from '@/app/types/api';
 
 export type WhatsAppConnectionStatus =
@@ -11,6 +13,19 @@ export type WhatsAppConnectionStatus =
   | 'CONNECTED'
   | 'ERROR'
   | 'DISCONNECTED';
+
+/** Safe, client-facing reason codes for connect / test flows */
+export type ConnectionReasonCode =
+  | 'CONNECTED'
+  | 'DISCONNECTED'
+  | 'INVALID_CREDENTIALS'
+  | 'INVALID_PHONE_NUMBER'
+  | 'UNAUTHORIZED'
+  | 'META_API_ERROR'
+  | 'CONFIGURATION_MISSING'
+  | 'NETWORK_ERROR'
+  | 'PHONE_IN_USE'
+  | 'ERROR';
 
 export interface SanitizedWhatsAppConnection {
   id: string;
@@ -36,6 +51,7 @@ export interface ConnectionHealthResult {
   webhook: boolean;
   token: boolean;
   status: WhatsAppConnectionStatus;
+  reasonCode: ConnectionReasonCode;
   message?: string;
   checkedAt: string;
 }
@@ -49,6 +65,74 @@ export interface ConnectProjectInput {
   directWabaId?: string;
   directPhoneId?: string;
   isCallingEnabled?: boolean;
+}
+
+export class DevWhatsAppConnectionError extends Error {
+  public reasonCode: ConnectionReasonCode;
+  public statusCode: number;
+
+  constructor(reasonCode: ConnectionReasonCode, message: string, statusCode = 400) {
+    super(message);
+    this.name = 'DevWhatsAppConnectionError';
+    this.reasonCode = reasonCode;
+    this.statusCode = statusCode;
+  }
+}
+
+function mapMetaExceptionToReason(err: MetaGraphApiException): ConnectionReasonCode {
+  if (err.code === 190 || err.code === 102) return 'INVALID_CREDENTIALS';
+  if (err.code === 10 || err.code === 200 || err.code === 100) {
+    // 100 often = invalid object id (bad phone/waba)
+    if (err.message?.toLowerCase().includes('phone') || err.message?.toLowerCase().includes('does not exist')) {
+      return 'INVALID_PHONE_NUMBER';
+    }
+    if (err.code === 10 || err.code === 200) return 'UNAUTHORIZED';
+  }
+  return 'META_API_ERROR';
+}
+
+function reasonMessage(code: ConnectionReasonCode, fallback?: string): string {
+  switch (code) {
+    case 'CONNECTED':
+      return 'WhatsApp connection is healthy.';
+    case 'DISCONNECTED':
+      return 'WhatsApp is not connected.';
+    case 'INVALID_CREDENTIALS':
+      return 'Invalid or expired access token.';
+    case 'INVALID_PHONE_NUMBER':
+      return 'Invalid WhatsApp phone number ID.';
+    case 'UNAUTHORIZED':
+      return 'Unauthorized to access this WhatsApp account.';
+    case 'META_API_ERROR':
+      return 'Meta API returned an error. Please try again.';
+    case 'CONFIGURATION_MISSING':
+      return 'Development WhatsApp configuration is missing on the server.';
+    case 'NETWORK_ERROR':
+      return 'Unable to reach Meta API. Check your network connection.';
+    case 'PHONE_IN_USE':
+      return 'This WhatsApp phone number is already connected to another workspace.';
+    default:
+      return fallback || 'Unable to connect to WhatsApp.';
+  }
+}
+
+function rowToSanitized(r: Record<string, any>, statusFallback?: WhatsAppConnectionStatus): SanitizedWhatsAppConnection {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    projectId: r.project_id,
+    wabaId: r.waba_id,
+    phoneNumberId: r.phone_number_id || null,
+    displayPhoneNumber: r.display_phone_number || null,
+    verifiedName: r.verified_name || null,
+    businessName: r.business_name || null,
+    status: ((r.status || statusFallback || 'PENDING') as string).toUpperCase() as WhatsAppConnectionStatus,
+    metadata: (r.metadata as Record<string, unknown>) || {},
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+    updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : new Date().toISOString(),
+    lastVerifiedAt: r.last_verified_at ? new Date(r.last_verified_at).toISOString() : null,
+    disconnectedAt: r.disconnected_at ? new Date(r.disconnected_at).toISOString() : null,
+  };
 }
 
 export class ProjectConnectionService {
@@ -71,23 +155,75 @@ export class ProjectConnectionService {
       return null;
     }
 
-    const r = rows[0];
-    return {
-      id: r.id,
-      workspaceId: r.workspace_id,
-      projectId: r.project_id,
-      wabaId: r.waba_id,
-      phoneNumberId: r.phone_number_id || null,
-      displayPhoneNumber: r.display_phone_number || null,
-      verifiedName: r.verified_name || null,
-      businessName: r.business_name || null,
-      status: (r.status || 'PENDING').toUpperCase() as WhatsAppConnectionStatus,
-      metadata: (r.metadata as Record<string, unknown>) || {},
-      createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
-      updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : new Date().toISOString(),
-      lastVerifiedAt: r.last_verified_at ? new Date(r.last_verified_at).toISOString() : null,
-      disconnectedAt: r.disconnected_at ? new Date(r.disconnected_at).toISOString() : null,
-    };
+    return rowToSanitized(rows[0]);
+  }
+
+  /**
+   * True when server env has development WhatsApp credentials configured.
+   * Never returns secret values.
+   */
+  isDevConfigAvailable(): boolean {
+    return isWhatsAppDevConfigAvailable();
+  }
+
+  /**
+   * Loads development credentials from server env (and optional admin meta_configurations token fallback).
+   * NEVER return this object to the browser.
+   */
+  private async loadDevCredentials(): Promise<{
+    accessToken: string;
+    phoneNumberId: string;
+    wabaId: string;
+  }> {
+    const cfg = await getPrivateConfig();
+    let accessToken = cfg.whatsappAccessToken || '';
+    const phoneNumberId = cfg.whatsappPhoneNumberId || '';
+    const wabaId = cfg.whatsappBusinessAccountId || '';
+
+    // Optional fallback: platform meta_configurations system user token
+    if (
+      (!accessToken || accessToken === 'your-whatsapp-cloud-api-access-token') &&
+      phoneNumberId &&
+      wabaId
+    ) {
+      try {
+        const { rows } = await sql`
+          SELECT encrypted_system_user_token, system_user_token_iv, system_user_token_tag
+          FROM meta_configurations
+          WHERE is_active = true AND encrypted_system_user_token IS NOT NULL
+          ORDER BY updated_at DESC NULLS LAST
+          LIMIT 1
+        `;
+        const row = rows[0];
+        if (row?.encrypted_system_user_token && row.system_user_token_iv && row.system_user_token_tag) {
+          accessToken = decrypt({
+            ciphertext: row.encrypted_system_user_token,
+            iv: row.system_user_token_iv,
+            tag: row.system_user_token_tag,
+          });
+        }
+      } catch {
+        // ignore fallback failures; treat as configuration missing below
+      }
+    }
+
+    const placeholder =
+      !accessToken ||
+      accessToken === 'your-whatsapp-cloud-api-access-token' ||
+      !phoneNumberId ||
+      phoneNumberId === 'your-whatsapp-phone-number-id' ||
+      !wabaId ||
+      wabaId === 'your-whatsapp-business-account-id';
+
+    if (placeholder) {
+      throw new DevWhatsAppConnectionError(
+        'CONFIGURATION_MISSING',
+        reasonMessage('CONFIGURATION_MISSING'),
+        400,
+      );
+    }
+
+    return { accessToken, phoneNumberId, wabaId };
   }
 
   /**
@@ -115,7 +251,6 @@ export class ProjectConnectionService {
       throw new Error(`Corrupted credentials for project ${projectId}`);
     }
 
-    // Decrypt using AES-256-GCM
     return decrypt({
       ciphertext: r.encrypted_access_token,
       iv: r.token_iv || '',
@@ -124,7 +259,242 @@ export class ProjectConnectionService {
   }
 
   /**
-   * Connects a WhatsApp Business account & phone number to a project.
+   * Syncs encrypted credentials into workspace-level whatsapp_accounts / phone_numbers.
+   */
+  private async syncWorkspaceAccounts(params: {
+    workspaceId: string;
+    wabaId: string;
+    businessName: string;
+    phoneNumberId: string;
+    displayPhoneNumber: string;
+    verifiedName: string | null;
+    encrypted: { ciphertext: string; iv: string; tag: string };
+    businessId?: string | null;
+  }): Promise<void> {
+    try {
+      const { rows: accRows } = await sql`
+        INSERT INTO whatsapp_accounts (
+          workspace_id, waba_id, business_id, name,
+          encrypted_access_token, token_iv, token_tag, status, updated_at
+        )
+        VALUES (
+          ${params.workspaceId}, ${params.wabaId}, ${params.businessId || null}, ${params.businessName},
+          ${params.encrypted.ciphertext}, ${params.encrypted.iv}, ${params.encrypted.tag}, 'connected', CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (workspace_id, waba_id) DO UPDATE SET
+          encrypted_access_token = EXCLUDED.encrypted_access_token,
+          token_iv = EXCLUDED.token_iv,
+          token_tag = EXCLUDED.token_tag,
+          status = 'connected',
+          updated_at = CURRENT_TIMESTAMP
+        RETURNING id
+      `;
+
+      const accountId = accRows[0]?.id;
+      if (accountId && params.phoneNumberId) {
+        await sql`
+          INSERT INTO whatsapp_phone_numbers (
+            workspace_id, whatsapp_account_id, phone_number_id,
+            display_phone_number, verified_name, status, updated_at
+          )
+          VALUES (
+            ${params.workspaceId}, ${accountId}, ${params.phoneNumberId},
+            ${params.displayPhoneNumber}, ${params.verifiedName}, 'verified', CURRENT_TIMESTAMP
+          )
+          ON CONFLICT (phone_number_id) DO UPDATE SET
+            workspace_id = EXCLUDED.workspace_id,
+            whatsapp_account_id = EXCLUDED.whatsapp_account_id,
+            display_phone_number = EXCLUDED.display_phone_number,
+            verified_name = EXCLUDED.verified_name,
+            status = 'verified',
+            updated_at = CURRENT_TIMESTAMP
+        `;
+      }
+    } catch (syncErr) {
+      console.warn('[ProjectConnectionService] Workspace backward compatibility sync warning:', syncErr);
+    }
+  }
+
+  private async upsertConnection(params: {
+    workspaceId: string;
+    projectId: string;
+    wabaId: string;
+    phoneNumberId: string;
+    displayPhoneNumber: string;
+    verifiedName: string | null;
+    businessName: string;
+    status: WhatsAppConnectionStatus;
+    encrypted: { ciphertext: string; iv: string; tag: string };
+    metadata: Record<string, unknown>;
+  }): Promise<SanitizedWhatsAppConnection> {
+    const { rows: connRows } = await sql`
+      INSERT INTO whatsapp_connections (
+        workspace_id, project_id, waba_id, phone_number_id,
+        display_phone_number, verified_name, business_name, status,
+        encrypted_access_token, token_iv, token_tag, metadata,
+        last_verified_at, disconnected_at, updated_at
+      )
+      VALUES (
+        ${params.workspaceId}, ${params.projectId}, ${params.wabaId}, ${params.phoneNumberId},
+        ${params.displayPhoneNumber}, ${params.verifiedName}, ${params.businessName}, ${params.status},
+        ${params.encrypted.ciphertext}, ${params.encrypted.iv}, ${params.encrypted.tag}, ${JSON.stringify(params.metadata)},
+        CURRENT_TIMESTAMP, NULL, CURRENT_TIMESTAMP
+      )
+      ON CONFLICT (project_id) DO UPDATE SET
+        workspace_id = EXCLUDED.workspace_id,
+        waba_id = EXCLUDED.waba_id,
+        phone_number_id = EXCLUDED.phone_number_id,
+        display_phone_number = EXCLUDED.display_phone_number,
+        verified_name = EXCLUDED.verified_name,
+        business_name = EXCLUDED.business_name,
+        status = EXCLUDED.status,
+        encrypted_access_token = EXCLUDED.encrypted_access_token,
+        token_iv = EXCLUDED.token_iv,
+        token_tag = EXCLUDED.token_tag,
+        metadata = EXCLUDED.metadata,
+        last_verified_at = CURRENT_TIMESTAMP,
+        disconnected_at = NULL,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING 
+        id, workspace_id, project_id, waba_id, phone_number_id,
+        display_phone_number, verified_name, business_name, status,
+        metadata, created_at, updated_at, last_verified_at, disconnected_at
+    `;
+
+    return rowToSanitized(connRows[0], params.status);
+  }
+
+  /**
+   * Connects using server-side development WhatsApp Cloud API credentials.
+   * Binds to the given project/workspace. Does not use Embedded Signup.
+   */
+  async connectFromDevelopmentConfig(input: {
+    projectId: string;
+    workspaceId: string;
+  }): Promise<SanitizedWhatsAppConnection> {
+    const { projectId, workspaceId } = input;
+    const { accessToken, phoneNumberId, wabaId } = await this.loadDevCredentials();
+
+    // Exclusive bind: another workspace already owns this phone
+    const { rows: owners } = await sql`
+      SELECT workspace_id, project_id
+      FROM whatsapp_connections
+      WHERE phone_number_id = ${phoneNumberId}
+        AND status = 'CONNECTED'
+        AND workspace_id != ${workspaceId}
+      LIMIT 1
+    `;
+    if (owners.length > 0) {
+      throw new DevWhatsAppConnectionError(
+        'PHONE_IN_USE',
+        reasonMessage('PHONE_IN_USE'),
+        409,
+      );
+    }
+
+    let businessName = 'WhatsApp Business';
+    let verifiedName: string | null = null;
+    let displayPhoneNumber: string | null = null;
+
+    if (isMockMode()) {
+      businessName = 'Development WhatsApp';
+      verifiedName = 'Dev Support';
+      displayPhoneNumber = '+1 (555) 000-0000';
+    } else {
+      try {
+        const wabaData = await metaGraphClient.get<{
+          id: string;
+          name?: string;
+        }>(`/${wabaId}?fields=id,name`, accessToken);
+        if (wabaData?.name) businessName = wabaData.name;
+      } catch (err: unknown) {
+        if (err instanceof MetaGraphApiException) {
+          const code = mapMetaExceptionToReason(err);
+          throw new DevWhatsAppConnectionError(code, reasonMessage(code), 400);
+        }
+        throw new DevWhatsAppConnectionError(
+          'NETWORK_ERROR',
+          reasonMessage('NETWORK_ERROR'),
+          503,
+        );
+      }
+
+      try {
+        const phoneData = await metaGraphClient.get<{
+          id: string;
+          display_phone_number?: string;
+          verified_name?: string;
+          status?: string;
+        }>(
+          `/${phoneNumberId}?fields=id,display_phone_number,verified_name,status`,
+          accessToken,
+        );
+        displayPhoneNumber = phoneData.display_phone_number || null;
+        verifiedName = phoneData.verified_name || null;
+      } catch (err: unknown) {
+        if (err instanceof MetaGraphApiException) {
+          const code =
+            err.code === 190 || err.code === 102
+              ? 'INVALID_CREDENTIALS'
+              : 'INVALID_PHONE_NUMBER';
+          throw new DevWhatsAppConnectionError(code, reasonMessage(code), 400);
+        }
+        throw new DevWhatsAppConnectionError(
+          'NETWORK_ERROR',
+          reasonMessage('NETWORK_ERROR'),
+          503,
+        );
+      }
+    }
+
+    displayPhoneNumber = displayPhoneNumber || phoneNumberId;
+
+    let webhookSuccess = true;
+    if (!isMockMode()) {
+      try {
+        await subscribeWebhook(accessToken, wabaId);
+      } catch (webhookErr) {
+        console.warn('[ProjectConnectionService] Dev webhook subscription warning:', webhookErr);
+        webhookSuccess = false;
+      }
+    }
+
+    const encrypted = encrypt(accessToken);
+    const status: WhatsAppConnectionStatus = webhookSuccess ? 'CONNECTED' : 'ERROR';
+    const metadata = {
+      connectionSource: 'development' as const,
+      webhookSubscribed: webhookSuccess,
+      connectedAt: new Date().toISOString(),
+    };
+
+    const connection = await this.upsertConnection({
+      workspaceId,
+      projectId,
+      wabaId,
+      phoneNumberId,
+      displayPhoneNumber,
+      verifiedName,
+      businessName,
+      status,
+      encrypted,
+      metadata,
+    });
+
+    await this.syncWorkspaceAccounts({
+      workspaceId,
+      wabaId,
+      businessName,
+      phoneNumberId,
+      displayPhoneNumber,
+      verifiedName,
+      encrypted,
+    });
+
+    return connection;
+  }
+
+  /**
+   * Connects a WhatsApp Business account & phone number to a project (Embedded Signup).
    */
   async connectProject(input: ConnectProjectInput): Promise<SanitizedWhatsAppConnection> {
     const { projectId, workspaceId, code, appId, sessionInfo } = input;
@@ -133,7 +503,6 @@ export class ProjectConnectionService {
       throw new Error("We couldn't authenticate with Meta. Please try again.");
     }
 
-    // 1. Exchange OAuth code for Meta Access Token
     let accessToken: string;
     try {
       if (isMockMode()) {
@@ -146,13 +515,11 @@ export class ProjectConnectionService {
       throw new Error("We couldn't authenticate with Meta. Please try again.");
     }
 
-    // 2. Discover WABA ID
     let wabaId = input.directWabaId || sessionInfo?.data?.waba_id;
     if (!wabaId && sessionInfo?.data?.page_ids?.[0]) {
       wabaId = sessionInfo.data.page_ids[0];
     }
 
-    // If no WABA ID found in sessionInfo, query Meta Graph API debug or /me/businesses
     if (!wabaId && !isMockMode()) {
       try {
         const meData = await metaGraphClient.get<{ id: string; name?: string }>('/me', accessToken);
@@ -170,7 +537,6 @@ export class ProjectConnectionService {
       }
     }
 
-    // 3. Discover WABA & Business metadata
     let businessName = 'WhatsApp Business';
     let verifiedName: string | null = null;
     let displayPhoneNumber: string | null = null;
@@ -193,7 +559,6 @@ export class ProjectConnectionService {
           businessName = wabaData.name;
         }
 
-        // If phone_number_id is missing, pick from waba phone_numbers
         const phones = wabaData?.phone_numbers?.data || [];
         if (!phoneNumberId && phones.length > 0) {
           phoneNumberId = phones[0].id;
@@ -204,7 +569,6 @@ export class ProjectConnectionService {
         console.warn('[ProjectConnectionService] WABA discovery warning:', err);
       }
 
-      // If we have a phoneNumberId, fetch phone details
       if (phoneNumberId) {
         try {
           const phoneData = await metaGraphClient.get<{
@@ -230,7 +594,6 @@ export class ProjectConnectionService {
 
     displayPhoneNumber = displayPhoneNumber || phoneNumberId;
 
-    // 4. Webhook Subscription
     let webhookSuccess = true;
     if (!isMockMode()) {
       try {
@@ -241,118 +604,46 @@ export class ProjectConnectionService {
       }
     }
 
-    // 5. Encrypt access token using AES-256-GCM
     const encrypted = encrypt(accessToken);
-
-    // 6. Persist connection in whatsapp_connections table
     const status: WhatsAppConnectionStatus = webhookSuccess ? 'CONNECTED' : 'ERROR';
     const metadata = {
+      connectionSource: 'embedded_signup' as const,
       appId,
       webhookSubscribed: webhookSuccess,
       callingEnabled: Boolean(input.isCallingEnabled),
       connectedAt: new Date().toISOString(),
     };
 
-    const { rows: connRows } = await sql`
-      INSERT INTO whatsapp_connections (
-        workspace_id, project_id, waba_id, phone_number_id,
-        display_phone_number, verified_name, business_name, status,
-        encrypted_access_token, token_iv, token_tag, metadata,
-        last_verified_at, disconnected_at, updated_at
-      )
-      VALUES (
-        ${workspaceId}, ${projectId}, ${wabaId}, ${phoneNumberId},
-        ${displayPhoneNumber}, ${verifiedName}, ${businessName}, ${status},
-        ${encrypted.ciphertext}, ${encrypted.iv}, ${encrypted.tag}, ${JSON.stringify(metadata)},
-        CURRENT_TIMESTAMP, NULL, CURRENT_TIMESTAMP
-      )
-      ON CONFLICT (project_id) DO UPDATE SET
-        workspace_id = EXCLUDED.workspace_id,
-        waba_id = EXCLUDED.waba_id,
-        phone_number_id = EXCLUDED.phone_number_id,
-        display_phone_number = EXCLUDED.display_phone_number,
-        verified_name = EXCLUDED.verified_name,
-        business_name = EXCLUDED.business_name,
-        status = EXCLUDED.status,
-        encrypted_access_token = EXCLUDED.encrypted_access_token,
-        token_iv = EXCLUDED.token_iv,
-        token_tag = EXCLUDED.token_tag,
-        metadata = EXCLUDED.metadata,
-        last_verified_at = CURRENT_TIMESTAMP,
-        disconnected_at = NULL,
-        updated_at = CURRENT_TIMESTAMP
-      RETURNING 
-        id, workspace_id, project_id, waba_id, phone_number_id,
-        display_phone_number, verified_name, business_name, status,
-        metadata, created_at, updated_at, last_verified_at, disconnected_at
-    `;
+    const connection = await this.upsertConnection({
+      workspaceId,
+      projectId,
+      wabaId,
+      phoneNumberId,
+      displayPhoneNumber,
+      verifiedName,
+      businessName,
+      status,
+      encrypted,
+      metadata,
+    });
 
-    // 7. Backward compatibility synchronization to whatsapp_accounts and whatsapp_phone_numbers
-    try {
-      const { rows: accRows } = await sql`
-        INSERT INTO whatsapp_accounts (
-          workspace_id, waba_id, business_id, name,
-          encrypted_access_token, token_iv, token_tag, status, updated_at
-        )
-        VALUES (
-          ${workspaceId}, ${wabaId}, ${sessionInfo?.data?.business_id || null}, ${businessName},
-          ${encrypted.ciphertext}, ${encrypted.iv}, ${encrypted.tag}, 'connected', CURRENT_TIMESTAMP
-        )
-        ON CONFLICT (workspace_id, waba_id) DO UPDATE SET
-          encrypted_access_token = EXCLUDED.encrypted_access_token,
-          token_iv = EXCLUDED.token_iv,
-          token_tag = EXCLUDED.token_tag,
-          status = 'connected',
-          updated_at = CURRENT_TIMESTAMP
-        RETURNING id
-      `;
+    await this.syncWorkspaceAccounts({
+      workspaceId,
+      wabaId,
+      businessName,
+      phoneNumberId,
+      displayPhoneNumber,
+      verifiedName,
+      encrypted,
+      businessId: sessionInfo?.data?.business_id || null,
+    });
 
-      const accountId = accRows[0]?.id;
-      if (accountId && phoneNumberId) {
-        await sql`
-          INSERT INTO whatsapp_phone_numbers (
-            workspace_id, whatsapp_account_id, phone_number_id,
-            display_phone_number, verified_name, status, updated_at
-          )
-          VALUES (
-            ${workspaceId}, ${accountId}, ${phoneNumberId},
-            ${displayPhoneNumber}, ${verifiedName}, 'verified', CURRENT_TIMESTAMP
-          )
-          ON CONFLICT (phone_number_id) DO UPDATE SET
-            workspace_id = EXCLUDED.workspace_id,
-            whatsapp_account_id = EXCLUDED.whatsapp_account_id,
-            display_phone_number = EXCLUDED.display_phone_number,
-            verified_name = EXCLUDED.verified_name,
-            status = 'verified',
-            updated_at = CURRENT_TIMESTAMP
-        `;
-      }
-    } catch (syncErr) {
-      console.warn('[ProjectConnectionService] Workspace backward compatibility sync warning:', syncErr);
-    }
-
-    const r = connRows[0];
-    return {
-      id: r.id,
-      workspaceId: r.workspace_id,
-      projectId: r.project_id,
-      wabaId: r.waba_id,
-      phoneNumberId: r.phone_number_id,
-      displayPhoneNumber: r.display_phone_number,
-      verifiedName: r.verified_name,
-      businessName: r.business_name,
-      status: (r.status as WhatsAppConnectionStatus) || status,
-      metadata: (r.metadata as Record<string, unknown>) || {},
-      createdAt: new Date(r.created_at).toISOString(),
-      updatedAt: new Date(r.updated_at).toISOString(),
-      lastVerifiedAt: r.last_verified_at ? new Date(r.last_verified_at).toISOString() : null,
-      disconnectedAt: null,
-    };
+    return connection;
   }
 
   /**
-   * Health check abstraction: tests WABA access, phone status, webhook subscription, and token validity.
-   * Maps Meta API errors to safe application messages without leaking tokens.
+   * Health check: probes WABA, phone, webhook subscription, and token validity.
+   * Maps Meta API errors to safe reason codes without leaking tokens.
    */
   async checkConnectionHealth(projectId: string): Promise<ConnectionHealthResult> {
     const checkedAt = new Date().toISOString();
@@ -366,7 +657,8 @@ export class ProjectConnectionService {
         webhook: false,
         token: false,
         status: 'PENDING',
-        message: 'No WhatsApp connection found for this project.',
+        reasonCode: 'DISCONNECTED',
+        message: reasonMessage('DISCONNECTED'),
         checkedAt,
       };
     }
@@ -379,7 +671,8 @@ export class ProjectConnectionService {
         webhook: false,
         token: false,
         status: 'DISCONNECTED',
-        message: 'WhatsApp connection is currently disconnected.',
+        reasonCode: 'DISCONNECTED',
+        message: reasonMessage('DISCONNECTED'),
         checkedAt,
       };
     }
@@ -392,6 +685,8 @@ export class ProjectConnectionService {
         webhook: true,
         token: true,
         status: 'CONNECTED',
+        reasonCode: 'CONNECTED',
+        message: reasonMessage('CONNECTED'),
         checkedAt,
       };
     }
@@ -407,7 +702,8 @@ export class ProjectConnectionService {
         webhook: false,
         token: false,
         status: 'ERROR',
-        message: 'Access token could not be decrypted. Reconnection required.',
+        reasonCode: 'INVALID_CREDENTIALS',
+        message: reasonMessage('INVALID_CREDENTIALS'),
         checkedAt,
       };
     }
@@ -416,31 +712,39 @@ export class ProjectConnectionService {
     let phoneHealthy = false;
     let webhookHealthy = false;
     let tokenHealthy = true;
+    let reasonCode: ConnectionReasonCode = 'CONNECTED';
 
-    // 1. WhatsApp API / WABA check
     try {
       await metaGraphClient.get(`/${connection.wabaId}?fields=id,name`, token);
       apiHealthy = true;
-    } catch (err: any) {
-      if (err instanceof MetaGraphApiException && (err.code === 190 || err.code === 102)) {
-        tokenHealthy = false;
+    } catch (err: unknown) {
+      if (err instanceof MetaGraphApiException) {
+        reasonCode = mapMetaExceptionToReason(err);
+        if (reasonCode === 'INVALID_CREDENTIALS') tokenHealthy = false;
+      } else {
+        reasonCode = 'NETWORK_ERROR';
       }
     }
 
-    // 2. Phone number check
-    if (connection.phoneNumberId && tokenHealthy) {
+    if (connection.phoneNumberId && tokenHealthy && reasonCode !== 'NETWORK_ERROR') {
       try {
         await metaGraphClient.get(`/${connection.phoneNumberId}?fields=id,status`, token);
         phoneHealthy = true;
-      } catch (err: any) {
-        if (err instanceof MetaGraphApiException && (err.code === 190 || err.code === 102)) {
-          tokenHealthy = false;
+      } catch (err: unknown) {
+        if (err instanceof MetaGraphApiException) {
+          if (err.code === 190 || err.code === 102) {
+            tokenHealthy = false;
+            reasonCode = 'INVALID_CREDENTIALS';
+          } else {
+            reasonCode = 'INVALID_PHONE_NUMBER';
+          }
+        } else {
+          reasonCode = 'NETWORK_ERROR';
         }
       }
     }
 
-    // 3. Webhook subscription check
-    if (tokenHealthy) {
+    if (tokenHealthy && reasonCode !== 'NETWORK_ERROR' && reasonCode !== 'INVALID_CREDENTIALS') {
       try {
         const subData = await metaGraphClient.get<{ data: Array<{ id: string }> }>(
           `/${connection.wabaId}/subscribed_apps`,
@@ -453,9 +757,14 @@ export class ProjectConnectionService {
     }
 
     const allHealthy = apiHealthy && phoneHealthy && webhookHealthy && tokenHealthy;
+    if (allHealthy) {
+      reasonCode = 'CONNECTED';
+    } else if (reasonCode === 'CONNECTED') {
+      reasonCode = 'META_API_ERROR';
+    }
+
     const currentStatus: WhatsAppConnectionStatus = allHealthy ? 'CONNECTED' : 'ERROR';
 
-    // Update last_verified_at in DB
     try {
       await sql`
         UPDATE whatsapp_connections
@@ -476,7 +785,8 @@ export class ProjectConnectionService {
       webhook: webhookHealthy,
       token: tokenHealthy,
       status: currentStatus,
-      message: allHealthy ? undefined : 'Connection requires attention. Your WhatsApp connection needs to be reconnected.',
+      reasonCode,
+      message: reasonMessage(reasonCode),
       checkedAt,
     };
   }

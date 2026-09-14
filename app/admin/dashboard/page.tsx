@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  Users, Building2, CreditCard, MessageSquare, Brain, Megaphone, Zap, ShoppingBag,
-  TrendingUp, AlertTriangle, CheckCircle2, Activity, ArrowUpRight, RefreshCw, Loader2, Sparkles, DollarSign, FileText
+  Users, Building2, CreditCard, MessageSquare,
+  AlertTriangle, CheckCircle2, Activity, ArrowUpRight, RefreshCw, Loader2, Sparkles, DollarSign
 } from 'lucide-react';
 import { AdminStatCard, AdminSectionTitle } from '@/components/admin/AdminCard';
 
@@ -41,9 +41,9 @@ export default function AdminDashboardPage() {
     { label: 'Active Subscriptions', value: formatNumber(data.activeSubscriptions ?? 0), sub: `${data.availablePlans ?? 3} plans • ${data.trialSubs ?? 0} trial subs`, icon: CreditCard, accent: 'text-white', iconBg: 'bg-blue-500/10', iconColor: 'text-blue-400' },
     { label: 'Monthly Revenue (MRR)', value: formatCurrency(data.mrr ?? 0), sub: `ARR ${formatCurrency(data.arr ?? 0)} • total ${formatCurrency(data.totalRevenue ?? 0)}`, icon: DollarSign, accent: 'text-emerald-400', iconBg: 'bg-emerald-500/10', iconColor: 'text-emerald-400' },
     { label: 'Connected WABAs', value: formatNumber(data.connectedWabas ?? 0), sub: `${data.totalPhones ?? data.connectedPhones ?? 0} phone numbers`, icon: MessageSquare, accent: 'text-white', iconBg: 'bg-green-500/10', iconColor: 'text-green-400' },
-    { label: 'Active AI Agents', value: formatNumber(data.activeAgents ?? 0), sub: `${formatNumber(data.aiConversations ?? 0)} conversations • ${formatNumber(data.totalTokens ?? 0)} tokens`, icon: Brain, accent: 'text-white', iconBg: 'bg-purple-500/10', iconColor: 'text-purple-400' },
-    { label: 'Campaigns', value: formatNumber(data.totalCampaigns ?? 0), sub: `${data.runningCampaigns ?? 0} running`, icon: Megaphone, accent: 'text-white', iconBg: 'bg-orange-500/10', iconColor: 'text-orange-400' },
-    { label: 'Automation Executions', value: formatNumber(data.automationExecutions ?? 0), sub: `${data.failedExecutions ?? 0} failed`, icon: Zap, accent: 'text-white', iconBg: 'bg-amber-500/10', iconColor: 'text-amber-400' },
+    { label: 'Workspaces', value: formatNumber(data.totalWorkspaces ?? 0), sub: `${formatNumber(data.activeWorkspaces ?? 0)} active workspaces`, icon: Building2, accent: 'text-white', iconBg: 'bg-cyan-500/10', iconColor: 'text-cyan-400' },
+    { label: 'Successful Payments', value: formatNumber(data.successfulPayments ?? 0), sub: `${formatNumber(data.failedPayments ?? 0)} failed`, icon: CreditCard, accent: 'text-white', iconBg: 'bg-emerald-500/10', iconColor: 'text-emerald-400' },
+    { label: 'Webhook Deliveries', value: formatNumber(data.totalWebhooks ?? 0), sub: `${data.failedWebhooks ?? 0} failed events`, icon: Activity, accent: 'text-white', iconBg: 'bg-purple-500/10', iconColor: 'text-purple-400' },
   ];
 
   const actionRequired = data.actionRequired || {};
@@ -57,7 +57,7 @@ export default function AdminDashboardPage() {
             <Sparkles className="w-3.5 h-3.5" /> Platform Performance Insights
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white">Platform Overview</h1>
-          <p className="text-xs text-white/40 mt-1">Real-time SaaS metrics across tenants, billing, WhatsApp, AI, campaigns & automations.</p>
+          <p className="text-xs text-white/40 mt-1">Real-time SaaS metrics across tenants, billing, users, and WhatsApp infrastructure.</p>
         </div>
         <div className="flex items-center gap-2">
           <select value={range} onChange={(e) => setRange(e.target.value)} className="bg-white/[0.06] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white outline-none">
@@ -76,30 +76,6 @@ export default function AdminDashboardPage() {
         ))}
       </div>
 
-      {/* Extra KPI row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-[#11141f] border border-white/[0.06] rounded-2xl px-5 py-4">
-          <p className="text-[11px] text-white/40 uppercase tracking-wider font-semibold">Workspaces</p>
-          <p className="text-xl font-extrabold text-white mt-1">{formatNumber(data.totalWorkspaces ?? 0)}</p>
-          <p className="text-[11px] text-white/30 mt-1">{formatNumber(data.activeWorkspaces ?? 0)} active</p>
-        </div>
-        <div className="bg-[#11141f] border border-white/[0.06] rounded-2xl px-5 py-4">
-          <p className="text-[11px] text-white/40 uppercase tracking-wider font-semibold">Failed Payments</p>
-          <p className="text-xl font-extrabold text-red-400 mt-1">{formatNumber(data.failedPayments ?? 0)}</p>
-          <p className="text-[11px] text-white/30 mt-1">Successful {formatNumber(data.successfulPayments ?? 0)}</p>
-        </div>
-        <div className="bg-[#11141f] border border-white/[0.06] rounded-2xl px-5 py-4">
-          <p className="text-[11px] text-white/40 uppercase tracking-wider font-semibold">AI Usage</p>
-          <p className="text-xl font-extrabold text-purple-400 mt-1">{formatNumber(data.totalTokens ?? 0)} tokens</p>
-          <p className="text-[11px] text-white/30 mt-1">Est. ${data.estimatedCost ?? '0.00'}</p>
-        </div>
-        <div className="bg-[#11141f] border border-white/[0.06] rounded-2xl px-5 py-4">
-          <p className="text-[11px] text-white/40 uppercase tracking-wider font-semibold">Commerce Orders</p>
-          <p className="text-xl font-extrabold text-amber-400 mt-1">{formatNumber(data.commerceOrders ?? 0)}</p>
-          <p className="text-[11px] text-white/30 mt-1">{formatNumber(data.openTickets ?? 0)} open tickets</p>
-        </div>
-      </div>
-
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Action Required */}
         <div className="lg:col-span-1 bg-[#11141f] border border-white/[0.06] rounded-2xl p-5">
@@ -113,7 +89,6 @@ export default function AdminDashboardPage() {
               { label: 'WhatsApp connection problems', count: actionRequired.whatsappProblems ?? 0, color: (actionRequired.whatsappProblems ?? 0) > 0 ? 'text-amber-400' : 'text-white/40' },
               { label: 'Webhook failures', count: actionRequired.webhookFailures ?? 0, color: (actionRequired.webhookFailures ?? 0) > 0 ? 'text-amber-400' : 'text-white/40' },
               { label: 'Meta configuration problems', count: actionRequired.metaConfigProblems ?? 0, color: 'text-white/40' },
-              { label: 'AI errors', count: actionRequired.aiErrors ?? 0, color: 'text-white/40' },
             ].map((it) => (
               <div key={it.label} className="flex items-center justify-between py-2 px-3 rounded-xl bg-white/[0.03] border border-white/[0.04]">
                 <span className="text-xs text-white/70">{it.label}</span>

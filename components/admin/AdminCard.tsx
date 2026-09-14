@@ -1,13 +1,5 @@
 import React from 'react';
 
-export function AdminCard({ children, className = '', hover = false }: { children: React.ReactNode; className?: string; hover?: boolean }) {
-  return (
-    <div className={`bg-[#11141f] border border-white/[0.06] rounded-2xl ${hover ? 'hover:border-white/[0.10] hover:shadow-xl hover:shadow-black/20 transition-all' : ''} ${className}`}>
-      {children}
-    </div>
-  );
-}
-
 export function AdminStatCard({
   label,
   value,

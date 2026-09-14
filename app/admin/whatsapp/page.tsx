@@ -54,7 +54,7 @@ export default function WhatsappOverviewPage() {
             <div className="space-y-2">
               <Link href="/admin/whatsapp/wabas" className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.06] border border-white/[0.06] text-xs text-white"><span className="flex items-center gap-2"><Building2 className="w-4 h-4 text-emerald-400" /> WABA Accounts</span><ExternalLink className="w-3 h-3 text-white/30" /></Link>
               <Link href="/admin/whatsapp/webhooks" className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.06] border border-white/[0.06] text-xs text-white"><span className="flex items-center gap-2"><Webhook className="w-4 h-4 text-indigo-400" /> Webhook Monitoring</span><ExternalLink className="w-3 h-3 text-white/30" /></Link>
-              <Link href="/my-wabas" className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/15 text-xs text-emerald-400"><span>Legacy: My WABAs</span><ExternalLink className="w-3 h-3" /></Link>
+              <Link href="/paid_messaging" className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/15 text-xs text-emerald-400"><span>Paid Messaging Tool</span><ExternalLink className="w-3 h-3" /></Link>
             </div>
           </div>
         </div>

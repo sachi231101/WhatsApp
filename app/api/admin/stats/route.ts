@@ -90,45 +90,13 @@ export async function GET(request: NextRequest) {
       stats.totalPhones = totalPhones[0]?.c ?? 0;
     } catch { stats.connectedWabas = 4; stats.connectedPhones = 6; }
 
-    // AI
-    try {
-      const { rows: agents } = await sql`SELECT COUNT(*)::int as c FROM ai_agents WHERE status != 'ARCHIVED' AND archived_at IS NULL`;
-      stats.activeAgents = agents[0]?.c ?? 0;
-      const { rows: conv } = await sql`SELECT COUNT(*)::int as c FROM ai_usage WHERE created_at >= now() - interval '30 days'`;
-      stats.aiConversations = conv[0]?.c ?? 0;
-      const { rows: tok } = await sql`SELECT COALESCE(SUM(total_tokens),0)::int as t, COALESCE(SUM(input_tokens),0)::int as inp, COALESCE(SUM(output_tokens),0)::int as outp FROM ai_usage`;
-      stats.totalTokens = tok[0]?.t ?? 0;
-      stats.inputTokens = tok[0]?.inp ?? 0;
-      stats.outputTokens = tok[0]?.outp ?? 0;
-      // Simple cost estimate: $0.002 per 1k tokens
-      stats.estimatedCost = ((stats.totalTokens / 1000) * 0.002).toFixed(2);
-    } catch { stats.activeAgents = 3; stats.aiConversations = 245; stats.totalTokens = 128400; stats.estimatedCost = '256.80'; }
-
-    // Campaigns
-    try {
-      const { rows: camp } = await sql`SELECT COUNT(*)::int as c FROM campaigns`;
-      stats.totalCampaigns = camp[0]?.c ?? 0;
-      const { rows: running } = await sql`SELECT COUNT(*)::int as c FROM campaigns WHERE status='processing' OR status='scheduled'`;
-      stats.runningCampaigns = running[0]?.c ?? 0;
-      const { rows: exec } = await sql`SELECT COUNT(*)::int as c FROM automation_executions`;
-      stats.automationExecutions = exec[0]?.c ?? 0;
-      const { rows: pendingExec } = await sql`SELECT COUNT(*)::int as c FROM automation_executions WHERE status='FAILED'`;
-      stats.failedExecutions = pendingExec[0]?.c ?? 0;
-    } catch { stats.totalCampaigns = 18; stats.automationExecutions = 542; }
-
     // Webhooks
     try {
       const { rows: wh } = await sql`SELECT COUNT(*)::int as c FROM webhook_events`;
-      stats.totalWebhookEvents = wh[0]?.c ?? 0;
+      stats.totalWebhooks = wh[0]?.c ?? 0;
       const { rows: failedWh } = await sql`SELECT COUNT(*)::int as c FROM webhook_events WHERE status='failed' OR processing_status='failed'`;
       stats.failedWebhooks = failedWh[0]?.c ?? 0;
-    } catch { stats.totalWebhookEvents = 1234; stats.failedWebhooks = 2; }
-
-    // Commerce (if tables exist)
-    try {
-      const { rows: supp } = await sql`SELECT COUNT(*)::int as c FROM support_tickets WHERE status IN ('new','open','in_progress')`;
-      stats.openTickets = supp[0]?.c ?? 0;
-    } catch { stats.openTickets = 4; }
+    } catch { stats.totalWebhooks = 1234; stats.failedWebhooks = 2; }
 
     // Fallbacks for display
     stats.newSignups7d = stats.recentUsers?.length ?? 3;
@@ -136,19 +104,17 @@ export async function GET(request: NextRequest) {
       failedPayments: stats.failedPayments ?? 0,
       webhookFailures: stats.failedWebhooks ?? 0,
       whatsappProblems: stats.disconnectedNumbers ?? 0,
-      aiErrors: 0,
       metaConfigProblems: 0,
     };
 
     // System health synthetic
     stats.systemHealth = [
-      { name: 'API', status: 'Healthy', color: 'emerald' },
+      { name: 'API Server', status: 'Healthy', color: 'emerald' },
       { name: 'Database', status: 'Healthy', color: 'emerald' },
-      { name: 'Redis', status: stats.failedWebhooks > 5 ? 'Warning' : 'Healthy', color: stats.failedWebhooks > 5 ? 'amber' : 'emerald' },
-      { name: 'WhatsApp', status: stats.connectedWabas > 0 ? 'Healthy' : 'Warning', color: stats.connectedWabas > 0 ? 'emerald' : 'amber' },
-      { name: 'OpenAI', status: 'Healthy', color: 'emerald' },
-      { name: 'Razorpay', status: 'Healthy', color: 'emerald' },
-      { name: 'Webhooks', status: stats.failedWebhooks > 3 ? 'Warning' : 'Healthy', color: stats.failedWebhooks > 3 ? 'amber' : 'emerald' },
+      { name: 'Redis Cache', status: stats.failedWebhooks > 5 ? 'Warning' : 'Healthy', color: stats.failedWebhooks > 5 ? 'amber' : 'emerald' },
+      { name: 'WhatsApp Meta API', status: stats.connectedWabas > 0 ? 'Healthy' : 'Warning', color: stats.connectedWabas > 0 ? 'emerald' : 'amber' },
+      { name: 'Payment Gateway', status: stats.failedPayments > 5 ? 'Warning' : 'Healthy', color: stats.failedPayments > 5 ? 'amber' : 'emerald' },
+      { name: 'Webhook Ingestion', status: stats.failedWebhooks > 3 ? 'Warning' : 'Healthy', color: stats.failedWebhooks > 3 ? 'amber' : 'emerald' },
     ];
 
     return NextResponse.json({ status: 'ok', data: stats });
@@ -157,9 +123,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ status: 'ok', data: {
       totalUsers: 0, totalTenants: 0, totalWorkspaces: 0, activeBusinesses: 0, availablePlans: 3,
       totalRevenue: 0, mrr: 0, arr: 0, failedPayments: 0, connectedWabas: 0, connectedPhones: 0,
-      activeAgents: 0, totalCampaigns: 0, automationExecutions: 0, recentUsers: [], recentTenants: [], recentPayments: [],
+      recentUsers: [], recentTenants: [], recentPayments: [],
       systemHealth: [],
-      actionRequired: { failedPayments: 0, webhookFailures: 0, whatsappProblems: 0, aiErrors: 0, metaConfigProblems: 0 },
+      actionRequired: { failedPayments: 0, webhookFailures: 0, whatsappProblems: 0, metaConfigProblems: 0 },
     }});
   }
 }

@@ -9,7 +9,8 @@ import privateConfig from '@/app/privateConfig';
 import { sql } from '@/lib/db';
 import { webhookRouterService } from '@/lib/services/whatsapp/webhookRouter';
 import { enqueueWebhookEvent } from '@/lib/queue/webhookQueue';
-import { extractMetaIdentifiers } from '@/lib/queue/webhookWorker';
+import { extractMetaIdentifiers, processWebhookJob } from '@/lib/queue/webhookWorker';
+import { isRedisAvailable } from '@/lib/queue/redis';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,8 +38,8 @@ export async function GET(request: NextRequest) {
  * 1. Verifies HMAC-SHA256 signature
  * 2. Checks idempotency
  * 3. Persists raw event into webhook_events
- * 4. Dispatches BullMQ job to queue
- * 5. Responds HTTP 200 immediately (no slow synchronous work)
+ * 4. Dispatches BullMQ job (or processes inline if Redis unavailable)
+ * 5. Responds HTTP 200 immediately
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -113,17 +114,35 @@ export async function POST(request: NextRequest) {
 
     const eventId = insertedRows[0]?.id;
 
-    // 5. Enqueue BullMQ job for asynchronous worker processing
     if (eventId) {
-      await enqueueWebhookEvent({
+      const jobData = {
         webhookEventId: eventId,
         externalEventId,
         payload: parsedBody,
         receivedAt: new Date().toISOString(),
-      });
+      };
+
+      // 5a. Try BullMQ queue first (when Redis is available)
+      if (isRedisAvailable()) {
+        const enqueueResult = await enqueueWebhookEvent(jobData);
+        if (!enqueueResult.enqueued) {
+          // BullMQ failed — fall back to inline synchronous processing
+          console.log('[Webhook] BullMQ enqueue failed, processing inline...');
+          processWebhookJob(jobData).catch((err) => {
+            console.error('[Webhook] Inline processing error:', err);
+          });
+        }
+      } else {
+        // 5b. No Redis configured — process inline synchronously (dev mode)
+        // We fire-and-forget to keep the HTTP response fast
+        console.log('[Webhook] Redis unavailable — processing inline (no Redis)');
+        processWebhookJob(jobData).catch((err) => {
+          console.error('[Webhook] Inline processing error:', err);
+        });
+      }
     }
 
-    // 6. Return HTTP 200 immediately
+    // 6. Return HTTP 200 immediately (Meta requires fast ACK)
     return NextResponse.json({
       status: 'ok',
       eventId: eventId || 'deduplicated',
@@ -135,3 +154,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
   }
 }
+

@@ -10,21 +10,11 @@ import {
   ShieldCheck,
   CreditCard,
   MessageSquare,
-  Brain,
-  Megaphone,
-  Zap,
-  ShoppingBag,
-  Headset,
-  Palette,
-  MessageCircle,
-  Link2,
-  BarChart3,
   Activity,
   FileSearch,
   Settings,
   ChevronDown,
   ChevronRight,
-  Search,
   LogOut,
   X,
 } from 'lucide-react';
@@ -46,118 +36,48 @@ const navSections: NavSection[] = [
     title: 'DASHBOARD',
     items: [
       { label: 'Platform Overview', href: '/admin/dashboard', icon: LayoutDashboard },
-      { label: 'Performance Summary', href: '/admin/dashboard?tab=performance', icon: BarChart3 },
-      { label: 'Revenue', href: '/admin/analytics?view=revenue', icon: CreditCard },
     ],
   },
   {
-    title: 'TENANTS',
+    title: 'TENANTS & BUSINESSES',
     items: [
       { label: 'All Businesses', href: '/admin/tenants', icon: Building2 },
       { label: 'Active', href: '/admin/tenants?status=active', icon: Building2 },
-      { label: 'Trial', href: '/admin/tenants?status=trial', icon: Building2 },
       { label: 'Suspended', href: '/admin/tenants?status=suspended', icon: Building2 },
     ],
   },
   {
-    title: 'USERS',
+    title: 'USERS & STAFF',
     items: [
-      { label: 'User List', href: '/admin/users', icon: Users },
-      { label: 'Staff', href: '/admin/users?role=staff', icon: ShieldCheck },
-      { label: 'Roles', href: '/admin/settings?tab=roles', icon: ShieldCheck },
-      { label: 'Permissions', href: '/admin/settings?tab=permissions', icon: ShieldCheck },
+      { label: 'User Directory', href: '/admin/users', icon: Users },
+      { label: 'Platform Staff', href: '/admin/users?role=staff', icon: ShieldCheck },
+      { label: 'Roles & Permissions', href: '/admin/settings?tab=roles', icon: ShieldCheck },
     ],
   },
   {
-    title: 'BILLING',
+    title: 'BILLING & PLANS',
     items: [
-      { label: 'Plan Management', href: '/admin/billing/plans', icon: CreditCard },
+      { label: 'Subscription Plans', href: '/admin/billing/plans', icon: CreditCard },
       { label: 'Subscriptions', href: '/admin/billing/subscriptions', icon: CreditCard },
       { label: 'Payments', href: '/admin/billing/payments', icon: CreditCard },
       { label: 'Invoices', href: '/admin/billing/invoices', icon: CreditCard },
-      { label: 'Usage', href: '/admin/billing/usage', icon: BarChart3 },
     ],
   },
   {
-    title: 'WHATSAPP',
+    title: 'WHATSAPP & META',
     items: [
       { label: 'Overview', href: '/admin/whatsapp', icon: MessageSquare },
       { label: 'WABA Accounts', href: '/admin/whatsapp/wabas', icon: Building2 },
-      { label: 'Phone Numbers', href: '/admin/whatsapp/phone-numbers', icon: MessageSquare },
-      { label: 'Templates', href: '/admin/whatsapp/templates', icon: MessageSquare },
-      { label: 'Webhooks', href: '/admin/whatsapp/webhooks', icon: Activity },
+      { label: 'Webhook Inspector', href: '/admin/whatsapp/webhooks', icon: Activity },
       { label: 'Meta Configuration', href: '/admin/whatsapp/meta-config', icon: Settings },
-      { label: 'Diagnostics', href: '/admin/whatsapp/diagnostics', icon: Activity },
     ],
   },
   {
-    title: 'AI INTELLIGENCE',
+    title: 'SYSTEM & LOGS',
     items: [
-      { label: 'Overview', href: '/admin/ai', icon: Brain },
-      { label: 'AI Agents', href: '/admin/ai/agents', icon: Brain },
-      { label: 'AI Usage & Costs', href: '/admin/ai/usage', icon: BarChart3 },
-      { label: 'Providers', href: '/admin/ai/providers', icon: Settings },
-    ],
-  },
-  {
-    title: 'CAMPAIGNS',
-    items: [
-      { label: 'All Campaigns', href: '/admin/campaigns', icon: Megaphone },
-      { label: 'Analytics', href: '/admin/campaigns?view=analytics', icon: BarChart3 },
-    ],
-  },
-  {
-    title: 'AUTOMATIONS',
-    items: [
-      { label: 'Workflows', href: '/admin/automations', icon: Zap },
-      { label: 'Executions', href: '/admin/automations?tab=executions', icon: Activity },
-    ],
-  },
-  {
-    title: 'COMMERCE',
-    items: [
-      { label: 'Overview', href: '/admin/commerce', icon: ShoppingBag },
-      { label: 'Orders', href: '/admin/commerce?tab=orders', icon: ShoppingBag },
-    ],
-  },
-  {
-    title: 'SUPPORT',
-    items: [
-      { label: 'Support Tickets', href: '/admin/support', icon: Headset },
-      { label: 'Inquiries', href: '/admin/support?tab=inquiries', icon: MessageCircle },
-    ],
-  },
-  {
-    title: 'MARKETING / CMS',
-    items: [
-      { label: 'CMS', href: '/admin/marketing', icon: Palette },
-      { label: 'Landing Page', href: '/admin/marketing?tab=landing', icon: Palette },
-    ],
-  },
-  {
-    title: 'QUICK REPLIES',
-    items: [
-      { label: 'Quick Replies', href: '/admin/quick-replies', icon: MessageCircle },
-    ],
-  },
-  {
-    title: 'SHORT LINKS',
-    items: [
-      { label: 'Short Links', href: '/admin/short-links', icon: Link2 },
-    ],
-  },
-  {
-    title: 'ANALYTICS',
-    items: [
-      { label: 'Platform Analytics', href: '/admin/analytics', icon: BarChart3 },
-    ],
-  },
-  {
-    title: 'SYSTEM',
-    items: [
-      { label: 'Monitoring', href: '/admin/monitoring', icon: Activity },
+      { label: 'System Health', href: '/admin/monitoring', icon: Activity },
       { label: 'Audit Logs', href: '/admin/audit-logs', icon: FileSearch },
-      { label: 'Settings', href: '/admin/settings', icon: Settings },
+      { label: 'Platform Settings', href: '/admin/settings', icon: Settings },
     ],
   },
 ];

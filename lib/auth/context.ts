@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres';
+import { sql } from '@/lib/db';
 import { WORKSPACE_ROLES, type WorkspaceRole, normalizeWorkspaceRole } from './roles';
 import { getPermissionsForRole } from './permissions';
 import { hashPassword } from './password';
@@ -571,6 +571,7 @@ export async function ensureCoreTables(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_conversations_proj_assigned ON conversations(project_id, assigned_user_id);`,
     `CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at);`,
     `CREATE INDEX IF NOT EXISTS idx_messages_proj_created ON messages(project_id, created_at);`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idempotency_key ON messages(workspace_id, project_id, idempotency_key) WHERE idempotency_key IS NOT NULL;`,
     `CREATE TABLE IF NOT EXISTS internal_notes (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

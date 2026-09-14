@@ -9,17 +9,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import {
-  Settings,
-  Webhook,
-  MessageSquare,
-  Building2,
-  FileText,
-  Megaphone,
-  Database,
-  BookOpen,
-  Instagram, Mail,
-} from 'lucide-react';
+import { Settings, Mail } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
@@ -41,48 +31,10 @@ const navSections = [
         Icon: Settings,
       },
       {
-        label: 'My Webhooks',
-        description: 'Debug tool showing all your incoming webhooks',
-        href: '/my-webhooks',
-        Icon: Webhook,
-      },
-      {
         label: 'Send Paid Messages',
         description: 'Send paid template and Marketing Messages Lite via WhatsApp',
         href: '/paid_messaging',
         Icon: Mail,
-      },
-    ],
-  },
-  {
-    title: 'Sample Products',
-    items: [
-      {
-        label: 'My Inbox',
-        description: 'Send and receive messages across all your phone numbers',
-        href: '/my-inbox',
-        Icon: MessageSquare,
-      },
-    ],
-  },
-  {
-    title: 'My Assets',
-    items: [
-      { label: 'My WABAs', description: 'View all your WABAs', href: '/my-wabas', Icon: Building2 },
-      { label: 'My Pages', description: 'View all your Facebook Pages', href: '/my-pages', Icon: FileText },
-      {
-        label: 'My Ad Accounts',
-        description: 'View all your Facebook Ad Accounts',
-        href: '/my-ad-accounts',
-        Icon: Megaphone,
-      },
-      { label: 'My Datasets', description: 'View all your Facebook Datasets', href: '/my-datasets', Icon: Database },
-      { label: 'My Catalogs', description: 'View all your Facebook Catalogs', href: '/my-catalogs', Icon: BookOpen },
-      {
-        label: 'My Instagram Accounts',
-        description: 'View all your Instagram Accounts',
-        href: '/my-instagram-accounts',
-        Icon: Instagram,
       },
     ],
   },

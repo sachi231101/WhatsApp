@@ -136,6 +136,7 @@ export default function ProjectInboxPage() {
 
   // Workspace context
   const [workspaceId, setWorkspaceId] = useState<string>('');
+  const [whatsappConnected, setWhatsappConnected] = useState<boolean | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const ablyClientRef = useRef<Ably.Realtime | null>(null);
 
@@ -143,10 +144,11 @@ export default function ProjectInboxPage() {
   useEffect(() => {
     async function loadInitialContext() {
       try {
-        const [projRes, userRes, membersRes] = await Promise.all([
+        const [projRes, userRes, membersRes, waRes] = await Promise.all([
           fetch(`/api/projects/${projectId}`),
           fetch('/api/auth/me'),
           fetch('/api/team'),
+          fetch(`/api/projects/${projectId}/whatsapp`),
         ]);
 
         if (projRes.status === 404) {
@@ -167,6 +169,14 @@ export default function ProjectInboxPage() {
         const membersJson = await membersRes.json();
         if (membersJson.status === 'ok' && Array.isArray(membersJson.data)) {
           setMembers(membersJson.data);
+        }
+
+        if (waRes.ok) {
+          const waJson = await waRes.json();
+          const conn = waJson.data;
+          setWhatsappConnected(Boolean(conn && conn.status === 'CONNECTED'));
+        } else {
+          setWhatsappConnected(false);
         }
       } catch (err) {
         console.error('Failed to load initial context:', err);
@@ -509,11 +519,14 @@ export default function ProjectInboxPage() {
                 ? {
                     ...m,
                     status: 'failed',
-                    error_message: json.error || 'Send failed',
+                    error_message: json.error || 'Unable to send message. Please try again.',
                   }
                 : m,
             ),
           );
+          if (json.code === 'WHATSAPP_NOT_CONNECTED' || res.status === 409) {
+            setWhatsappConnected(false);
+          }
         }
       }
     } catch (err: any) {
@@ -759,6 +772,33 @@ export default function ProjectInboxPage() {
               <div className="p-8 flex flex-col items-center justify-center text-center space-y-3">
                 <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
                 <p className="text-xs text-gray-500 font-medium">Loading conversations...</p>
+              </div>
+            ) : whatsappConnected === false ? (
+              <div className="p-8 text-center space-y-4">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center mx-auto text-amber-600">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-gray-800">WhatsApp is not connected</h4>
+                  <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed">
+                    Connect your WhatsApp account to start receiving and sending messages.
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                  <Link
+                    href="/settings?tab=whatsapp"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#25D366] hover:bg-[#1ebe5d] text-white text-xs font-semibold rounded-xl shadow-2xs transition-all"
+                  >
+                    Connect WhatsApp
+                  </Link>
+                  <Link
+                    href={`/projects/${projectId}/whatsapp`}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-xl transition-all"
+                  >
+                    Project WhatsApp
+                    <ExternalLink className="w-3 h-3" />
+                  </Link>
+                </div>
               </div>
             ) : conversations.length === 0 ? (
               <div className="p-8 text-center space-y-3">

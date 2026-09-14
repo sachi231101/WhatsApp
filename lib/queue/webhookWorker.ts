@@ -48,6 +48,7 @@ export async function processWebhookJob(data: WebhookJobData): Promise<WebhookPr
         SELECT project_id, workspace_id
         FROM whatsapp_connections
         WHERE phone_number_id = ${phoneNumberId} AND status = 'CONNECTED'
+        ORDER BY last_verified_at DESC NULLS LAST, updated_at DESC
         LIMIT 1
       `;
       if (phoneConnRows.length > 0) {
@@ -62,6 +63,7 @@ export async function processWebhookJob(data: WebhookJobData): Promise<WebhookPr
         SELECT project_id, workspace_id
         FROM whatsapp_connections
         WHERE waba_id = ${wabaId} AND status = 'CONNECTED'
+        ORDER BY last_verified_at DESC NULLS LAST, updated_at DESC
         LIMIT 1
       `;
       if (wabaConnRows.length > 0) {
@@ -130,6 +132,7 @@ export async function processWebhookJob(data: WebhookJobData): Promise<WebhookPr
             // Find or create Conversation scoped by project_id and workspace_id
             let convId: string;
             let conversationHandlingMode = 'AI_HANDLING';
+            let conversationUnreadCount = 1;
             const { rows: existingConvRows } = await sql`
               SELECT id, status, unread_count, handling_mode
               FROM conversations
@@ -140,7 +143,7 @@ export async function processWebhookJob(data: WebhookJobData): Promise<WebhookPr
             if (existingConvRows.length > 0) {
               convId = existingConvRows[0].id;
               conversationHandlingMode = existingConvRows[0].handling_mode || 'AI_HANDLING';
-              await sql`
+              const { rows: updatedConvRows } = await sql`
                 UPDATE conversations
                 SET 
                   last_message_preview = ${preview.slice(0, 100)},
@@ -150,7 +153,9 @@ export async function processWebhookJob(data: WebhookJobData): Promise<WebhookPr
                   status = CASE WHEN status = 'resolved' OR status = 'closed' THEN 'open' ELSE status END,
                   updated_at = CURRENT_TIMESTAMP
                 WHERE id = ${convId}
+                RETURNING unread_count
               `;
+              conversationUnreadCount = Number(updatedConvRows[0]?.unread_count ?? (Number(existingConvRows[0].unread_count || 0) + 1));
             } else {
               const { rows: newConvRows } = await sql`
                 INSERT INTO conversations (
@@ -161,10 +166,11 @@ export async function processWebhookJob(data: WebhookJobData): Promise<WebhookPr
                   ${workspaceId}, ${projectId}, ${contactId}, 'open', 'AI_HANDLING',
                   ${preview.slice(0, 100)}, CURRENT_TIMESTAMP, 1, ${windowExpiresAt}
                 )
-                RETURNING id, handling_mode
+                RETURNING id, handling_mode, unread_count
               `;
               convId = newConvRows[0]?.id;
               conversationHandlingMode = newConvRows[0]?.handling_mode || 'AI_HANDLING';
+              conversationUnreadCount = Number(newConvRows[0]?.unread_count ?? 1);
 
               // Publish Domain Event for conversation.created (Phase 10 Trigger Engine)
               const { publishDomainEvent } = await import('@/lib/events/domainEvent');
@@ -264,6 +270,7 @@ export async function processWebhookJob(data: WebhookJobData): Promise<WebhookPr
                 conversationId: convId,
                 lastMessagePreview: preview.slice(0, 100),
                 status: 'open',
+                unreadCount: conversationUnreadCount,
               },
             });
 

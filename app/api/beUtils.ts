@@ -5,7 +5,7 @@
 
 'use server';
 
-import { sql } from '@vercel/postgres';
+import { sql } from '@/lib/db';
 
 import getPrivateConfig from '@/app/privateConfig';
 import publicConfig from '@/app/publicConfig';

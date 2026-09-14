@@ -24,12 +24,28 @@ export async function GET() {
 
   // Redis / Queue
   try {
-    const envHasRedis = Boolean(process.env.REDIS_URL || process.env.KV_URL);
-    checks.push({ subsystem: 'Redis', status: envHasRedis ? 'Healthy' : 'Warning', latencyMs: envHasRedis ? 12 : null, color: envHasRedis ? 'emerald' : 'amber', error: envHasRedis ? null : 'REDIS_URL not configured' });
-    checks.push({ subsystem: 'Queue', status: 'Healthy', latencyMs: 8, color: 'emerald' });
-    checks.push({ subsystem: 'Workers', status: 'Healthy', latencyMs: 15, color: 'emerald' });
+    const hasRedisConfig = Boolean(process.env.REDIS_URL || process.env.REDIS_HOST || process.env.KV_URL);
+    if (hasRedisConfig) {
+      const { getRedisConnection } = await import('@/lib/queue/redis');
+      const r = getRedisConnection();
+      const t0 = Date.now();
+      await Promise.race([
+        r.ping(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Redis ping timeout')), 2000)),
+      ]);
+      const latency = Date.now() - t0;
+      checks.push({ subsystem: 'Redis', status: 'Healthy', latencyMs: latency, color: 'emerald' });
+      checks.push({ subsystem: 'Queue', status: 'Healthy', latencyMs: Math.max(1, Math.round(latency / 2)), color: 'emerald' });
+      checks.push({ subsystem: 'Workers', status: 'Healthy', latencyMs: latency, color: 'emerald' });
+    } else {
+      checks.push({ subsystem: 'Redis', status: 'Warning', color: 'amber', error: 'REDIS_URL not configured' });
+      checks.push({ subsystem: 'Queue', status: 'Warning', color: 'amber', error: 'Queue paused' });
+      checks.push({ subsystem: 'Workers', status: 'Warning', color: 'amber', error: 'Workers idle' });
+    }
   } catch (e: any) {
     checks.push({ subsystem: 'Redis', status: 'Down', error: e.message, color: 'red' });
+    checks.push({ subsystem: 'Queue', status: 'Warning', color: 'amber', error: 'Queue disconnected' });
+    checks.push({ subsystem: 'Workers', status: 'Warning', color: 'amber', error: 'Workers disconnected' });
   }
 
   // WhatsApp API

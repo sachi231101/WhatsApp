@@ -3,6 +3,16 @@ import { ensureCoreTables } from '@/lib/auth/context';
 import { enqueueOutboundMessage } from '@/lib/queue/outboundQueue';
 import { publishInboxEvent } from '@/lib/realtime/ablyPublisher';
 
+export class WhatsAppNotConnectedError extends Error {
+  public code = 'WHATSAPP_NOT_CONNECTED';
+  public statusCode = 409;
+
+  constructor(message = 'WhatsApp is not connected. Connect your WhatsApp account to send messages.') {
+    super(message);
+    this.name = 'WhatsAppNotConnectedError';
+  }
+}
+
 export interface GetConversationsOptions {
   workspaceId: string;
   projectId: string;
@@ -260,7 +270,7 @@ export class InboxService {
       throw new Error('Message content is required');
     }
 
-    // 1. Fetch conversation and contact
+    // 1. Fetch conversation and contact (tenant-scoped)
     const { rows: convRows } = await sql`
       SELECT 
         c.id, c.workspace_id, c.project_id, c.window_expires_at,
@@ -277,7 +287,24 @@ export class InboxService {
 
     const conv = convRows[0];
 
-    // 2. WhatsApp 24-Hour Policy Window Enforcement
+    // 2. Require an active WhatsApp connection for this project (fail fast)
+    const { rows: connRows } = await sql`
+      SELECT id, status, encrypted_access_token, phone_number_id
+      FROM whatsapp_connections
+      WHERE project_id = ${projectId}
+        AND workspace_id = ${workspaceId}
+        AND status = 'CONNECTED'
+      LIMIT 1
+    `;
+    if (
+      connRows.length === 0 ||
+      !connRows[0].encrypted_access_token ||
+      !connRows[0].phone_number_id
+    ) {
+      throw new WhatsAppNotConnectedError();
+    }
+
+    // 3. WhatsApp 24-Hour Policy Window Enforcement
     if (type !== 'template' && conv.window_expires_at) {
       const windowExpiry = new Date(conv.window_expires_at).getTime();
       if (Date.now() > windowExpiry) {
@@ -288,7 +315,7 @@ export class InboxService {
       }
     }
 
-    // 3. Outbound Idempotency Check
+    // 4. Outbound Idempotency Check
     if (idempotencyKey) {
       const { rows: existingMsgRows } = await sql`
         SELECT id, conversation_id, body, status, created_at, meta_message_id
@@ -304,7 +331,7 @@ export class InboxService {
       }
     }
 
-    // 4. Resolve reply-to Meta message ID if specified
+    // 5. Resolve reply-to Meta message ID if specified
     let replyToMetaId: string | undefined;
     if (replyToMessageId) {
       const { rows: replyRows } = await sql`
@@ -313,7 +340,7 @@ export class InboxService {
       replyToMetaId = replyRows[0]?.meta_message_id || undefined;
     }
 
-    // 5. Create Message with QUEUED status
+    // 6. Create Message with QUEUED status
     const { rows: msgRows } = await sql`
       INSERT INTO messages (
         workspace_id, project_id, conversation_id, direction, sender_type,
@@ -332,7 +359,7 @@ export class InboxService {
 
     const message = msgRows[0];
 
-    // 6. Update conversation preview
+    // 7. Update conversation preview
     await sql`
       UPDATE conversations
       SET 
@@ -342,7 +369,7 @@ export class InboxService {
       WHERE id = ${conversationId}
     `;
 
-    // 7. Enqueue BullMQ Outbound Job
+    // 8. Enqueue BullMQ Outbound Job (or process inline when Redis unavailable)
     const jobId = await enqueueOutboundMessage({
       messageId: message.id,
       workspaceId,
@@ -361,7 +388,7 @@ export class InboxService {
       replyToMetaId,
     });
 
-    // 8. Publish Optimistic/Queued Event to Ably
+    // 9. Publish Optimistic/Queued Event to Ably
     await publishInboxEvent({
       workspaceId,
       projectId,

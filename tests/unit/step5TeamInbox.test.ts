@@ -67,6 +67,14 @@ vi.mock('@/app/api/mockData', () => ({
   isMockMode: vi.fn().mockReturnValue(false),
 }));
 
+vi.mock('@/lib/queue/redis', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/queue/redis')>();
+  return {
+    ...actual,
+    isRedisAvailable: () => true,
+  };
+});
+
 // Imports
 import { inboxService } from '@/lib/services/inbox/inboxService';
 import {
@@ -483,6 +491,20 @@ describe('STEP 5: Production WhatsApp Team Inbox', () => {
     mockSql.mockImplementation(async (strings: any, ...values: any[]) => {
       const q = Array.isArray(strings) ? strings.join('') : String(strings || '');
 
+      // WhatsApp connection guard (must be CONNECTED to send)
+      if (q.includes('FROM whatsapp_connections') && q.includes("status = 'CONNECTED'")) {
+        return {
+          rows: [
+            {
+              id: 'wa-conn-a',
+              status: 'CONNECTED',
+              encrypted_access_token: 'enc-token',
+              phone_number_id: testPhoneNumberId,
+            },
+          ],
+        };
+      }
+
       // Fetch conversation check
       if (q.includes('FROM conversations c') && q.includes('JOIN contacts ct')) {
         return {
@@ -553,6 +575,19 @@ describe('STEP 5: Production WhatsApp Team Inbox', () => {
 
     mockSql.mockImplementation(async (strings: any, ...values: any[]) => {
       const q = Array.isArray(strings) ? strings.join('') : String(strings || '');
+
+      if (q.includes('FROM whatsapp_connections') && q.includes("status = 'CONNECTED'")) {
+        return {
+          rows: [
+            {
+              id: 'wa-conn-a',
+              status: 'CONNECTED',
+              encrypted_access_token: 'enc-token',
+              phone_number_id: testPhoneNumberId,
+            },
+          ],
+        };
+      }
 
       if (q.includes('FROM conversations c') && q.includes('JOIN contacts ct')) {
         return {
@@ -835,6 +870,19 @@ describe('STEP 5: Production WhatsApp Team Inbox', () => {
 
     mockSql.mockImplementation(async (strings: any, ...values: any[]) => {
       const q = Array.isArray(strings) ? strings.join('') : String(strings || '');
+
+      if (q.includes('FROM whatsapp_connections') && q.includes("status = 'CONNECTED'")) {
+        return {
+          rows: [
+            {
+              id: 'wa-conn-a',
+              status: 'CONNECTED',
+              encrypted_access_token: 'enc-token',
+              phone_number_id: testPhoneNumberId,
+            },
+          ],
+        };
+      }
 
       if (q.includes('FROM conversations c') && q.includes('JOIN contacts ct')) {
         return {
@@ -1177,10 +1225,10 @@ describe('STEP 5: Production WhatsApp Team Inbox', () => {
   // 20. Queue retry behavior works
   it('20. Queue retry behavior works', () => {
     const queue = getOutboundQueue();
-    expect(queue).toBeDefined();
-    expect(queue.name).toBe('whatsapp-outbound');
-    expect(queue.opts.defaultJobOptions?.attempts).toBe(3);
-    expect(queue.opts.defaultJobOptions?.backoff).toEqual({
+    expect(queue).not.toBeNull();
+    expect(queue!.name).toBe('whatsapp-outbound');
+    expect(queue!.opts.defaultJobOptions?.attempts).toBe(3);
+    expect(queue!.opts.defaultJobOptions?.backoff).toEqual({
       type: 'exponential',
       delay: 2000,
     });

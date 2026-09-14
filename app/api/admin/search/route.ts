@@ -50,14 +50,6 @@ export async function GET(request: NextRequest) {
     const { rows: inv } = await sql`SELECT id,invoice_number,status FROM invoices WHERE invoice_number ILIKE ${like} LIMIT 5`;
     push(inv, 'Invoice');
   } catch {}
-  try {
-    const { rows: camps } = await sql`SELECT id,name,status FROM campaigns WHERE name ILIKE ${like} LIMIT 5`;
-    push(camps, 'Campaign');
-  } catch {}
-  try {
-    const { rows: autom } = await sql`SELECT id,name,status FROM automations WHERE name ILIKE ${like} LIMIT 5`;
-    push(autom, 'Automation');
-  } catch {}
 
   return NextResponse.json({ status: 'ok', data: results.slice(0, 20) });
 }

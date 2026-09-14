@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres';
+import { sql } from '@/lib/db';
 import { ensureCoreTables } from '@/lib/auth/context';
 
 export interface InboundMessageParams {
@@ -258,81 +258,17 @@ export class MessageService {
     `;
 
     if (rows.length === 0) {
-      await this.seedDemoConversationsIfEmpty(workspaceId);
-      const res = await sql`
-        SELECT 
-          c.id, c.status, c.last_message_preview, c.last_message_at, c.unread_count, c.window_expires_at,
-          ct.wa_id, ct.phone_number, ct.profile_name, ct.avatar_url,
-          p.display_phone_number as business_number, p.phone_number_id
-        FROM conversations c
-        JOIN contacts ct ON c.contact_id = ct.id
-        JOIN whatsapp_phone_numbers p ON c.whatsapp_phone_number_id = p.id
-        WHERE c.workspace_id = ${workspaceId}
-        ORDER BY c.last_message_at DESC
-      `;
-      rows = res.rows;
+      return [];
     }
 
     return rows;
   }
 
   /**
-   * Seed demo conversations for empty workspaces to provide immediate interactive experience
+   * @deprecated Demo seeding disabled — real WhatsApp inbox uses project-scoped data only.
    */
-  async seedDemoConversationsIfEmpty(workspaceId: string) {
-    try {
-      const { rows: phoneRows } = await sql`
-        INSERT INTO whatsapp_phone_numbers (workspace_id, phone_number_id, display_phone_number, verified_name, status, is_calling_enabled)
-        VALUES (${workspaceId}, 'demo_phone_1001', '+1 (555) 019-2834', 'WazzApp AI Business', 'CONNECTED', true)
-        ON CONFLICT (phone_number_id) DO UPDATE SET status = 'CONNECTED'
-        RETURNING id
-      `;
-      const phoneId = phoneRows[0]?.id;
-      if (!phoneId) return;
-
-      const { rows: c1 } = await sql`
-        INSERT INTO contacts (workspace_id, wa_id, phone_number, first_name, last_name, profile_name, custom_attributes)
-        VALUES (${workspaceId}, '+919876543210', '+919876543210', 'Rahul', 'Sharma', 'Rahul Sharma', '{"stage":"hot_lead","score":87,"tag":"Hot Lead"}')
-        ON CONFLICT (workspace_id, wa_id) DO UPDATE SET profile_name = 'Rahul Sharma'
-        RETURNING id
-      `;
-      const { rows: conv1 } = await sql`
-        INSERT INTO conversations (workspace_id, whatsapp_phone_number_id, contact_id, status, last_message_preview, last_message_at, unread_count, window_expires_at)
-        VALUES (${workspaceId}, ${phoneId}, ${c1[0].id}, 'open', 'What is the pricing for 5 AI agents?', NOW() - INTERVAL '2 minutes', 1, NOW() + INTERVAL '23 hours')
-        ON CONFLICT (workspace_id, whatsapp_phone_number_id, contact_id) DO UPDATE SET last_message_preview = 'What is the pricing for 5 AI agents?'
-        RETURNING id
-      `;
-      await sql`
-        INSERT INTO messages (workspace_id, conversation_id, direction, sender_type, type, body, status, created_at)
-        VALUES 
-        (${workspaceId}, ${conv1[0].id}, 'inbound', 'customer', 'text', 'Hi, I would like to learn more about WazzApp AI features.', 'delivered', NOW() - INTERVAL '15 minutes'),
-        (${workspaceId}, ${conv1[0].id}, 'outbound', 'user', 'text', 'Hello Rahul! Welcome. We offer automated AI agents, team inbox, and multi-tenant WhatsApp integration.', 'read', NOW() - INTERVAL '10 minutes'),
-        (${workspaceId}, ${conv1[0].id}, 'inbound', 'customer', 'text', 'What is the pricing for 5 AI agents?', 'delivered', NOW() - INTERVAL '2 minutes')
-        ON CONFLICT DO NOTHING
-      `;
-
-      const { rows: c2 } = await sql`
-        INSERT INTO contacts (workspace_id, wa_id, phone_number, first_name, last_name, profile_name, custom_attributes)
-        VALUES (${workspaceId}, '+919811122233', '+919811122233', 'Priya', 'Mehta', 'Priya Mehta', '{"stage":"opportunity","score":64,"tag":"AI Qualified"}')
-        ON CONFLICT (workspace_id, wa_id) DO UPDATE SET profile_name = 'Priya Mehta'
-        RETURNING id
-      `;
-      const { rows: conv2 } = await sql`
-        INSERT INTO conversations (workspace_id, whatsapp_phone_number_id, contact_id, status, last_message_preview, last_message_at, unread_count, window_expires_at)
-        VALUES (${workspaceId}, ${phoneId}, ${c2[0].id}, 'open', 'Our pricing starts at ₹2,999/month for unlimited conversations.', NOW() - INTERVAL '5 minutes', 0, NOW() + INTERVAL '22 hours')
-        ON CONFLICT (workspace_id, whatsapp_phone_number_id, contact_id) DO UPDATE SET last_message_preview = 'Our pricing starts at ₹2,999/month for unlimited conversations.'
-        RETURNING id
-      `;
-      await sql`
-        INSERT INTO messages (workspace_id, conversation_id, direction, sender_type, type, body, status, created_at)
-        VALUES 
-        (${workspaceId}, ${conv2[0].id}, 'inbound', 'customer', 'text', 'Can you tell me about the subscription plans?', 'delivered', NOW() - INTERVAL '6 minutes'),
-        (${workspaceId}, ${conv2[0].id}, 'outbound', 'ai_agent', 'text', 'Our pricing starts at ₹2,999/month for unlimited conversations with full AI automation and multi-agent routing.', 'read', NOW() - INTERVAL '5 minutes')
-        ON CONFLICT DO NOTHING
-      `;
-    } catch (seedErr) {
-      console.warn('Demo conversation seed skipped:', seedErr);
-    }
+  async seedDemoConversationsIfEmpty(_workspaceId: string) {
+    return;
   }
 
   /**

@@ -10,6 +10,10 @@ const privateConfig = {
   fbRegPin: process.env.FB_REG_PIN,
   fbVerifyToken: process.env.FB_VERIFY_TOKEN,
   ablyKey: process.env.ABLY_KEY,
+  /** Development WhatsApp Cloud API — server-only, never expose to the browser */
+  whatsappAccessToken: process.env.WHATSAPP_ACCESS_TOKEN,
+  whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
+  whatsappBusinessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID,
 };
 
 export default async function getPrivateConfig() {

@@ -91,7 +91,7 @@ export default function PaymentsPage() {
             </div>
           ))}
         </div>
-        <p className="text-[11px] text-white/30 mt-3">Gateway abstraction: <span className="font-mono text-white/60">PaymentProvider → RazorpayProvider | StripeProvider</span> <span className="text-white/40">lib/services/billing/paymentProvider.ts</span></p>
+        <p className="text-[11px] text-white/30 mt-3">Configure gateway keys in environment to enable live payments. Without keys, billing runs in mock mode.</p>
       </div>
     </div>
   );

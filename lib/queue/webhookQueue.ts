@@ -1,5 +1,5 @@
 import { Queue } from 'bullmq';
-import { getRedisOptions } from './redis';
+import { getRedisOptions, isRedisAvailable } from './redis';
 
 export const WEBHOOK_QUEUE_NAME = 'whatsapp-webhooks';
 
@@ -16,7 +16,7 @@ export const testEnqueuedJobs: Array<{ name: string; data: WebhookJobData; opts?
 let bullQueue: Queue<WebhookJobData> | null = null;
 
 export function getWebhookQueue(): Queue<WebhookJobData> | null {
-  if (process.env.NODE_ENV === 'test') {
+  if (process.env.NODE_ENV === 'test' || !isRedisAvailable()) {
     return null;
   }
 

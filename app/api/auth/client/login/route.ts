@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
+import { sql } from '@/lib/db';
 import { verifyPassword } from '@/lib/auth/password';
 import { createSessionToken, applySessionCookie } from '@/lib/auth/session';
 import { resolveWorkspaceContext, ensureCoreTables } from '@/lib/auth/context';

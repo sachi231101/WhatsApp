@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { requireProjectAccess, ProjectNotFoundError } from '@/lib/projects/project-access';
 import { requireAuthenticatedUser, AuthenticationRequiredError } from '@/lib/auth/user';
 import { RoleAuthorizationError } from '@/lib/workspace/workspace-access';
-import { inboxService } from '@/lib/services/inbox/inboxService';
+import { inboxService, WhatsAppNotConnectedError } from '@/lib/services/inbox/inboxService';
 
 export const dynamic = 'force-dynamic';
 
@@ -122,13 +122,22 @@ export async function POST(
     if (error instanceof RoleAuthorizationError || error.statusCode === 403) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
+    if (error instanceof WhatsAppNotConnectedError || error.code === 'WHATSAPP_NOT_CONNECTED') {
+      return NextResponse.json(
+        {
+          error: error.message || 'WhatsApp is not connected',
+          code: 'WHATSAPP_NOT_CONNECTED',
+        },
+        { status: 409 },
+      );
+    }
     if (error.message?.includes('Conversation not found') || error.message?.includes('access denied')) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
 
     console.error('[InboxAPI] Error dispatching message:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to send message' },
+      { error: 'Unable to send message. Please try again.' },
       { status: 500 },
     );
   }
